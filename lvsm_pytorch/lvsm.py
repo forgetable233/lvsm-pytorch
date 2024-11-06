@@ -1,6 +1,7 @@
 from __future__ import annotations
 from lvsm_pytorch.tensor_typing import *
 
+import os
 from functools import wraps
 
 import torchvision
@@ -9,6 +10,10 @@ import torch
 from torch import nn
 from torch.nn import Module, ModuleList
 import torch.nn.functional as F
+import pytorch_lightning as pl
+from pytorch_lightning.utilities import rank_zero_only
+import numpy as np
+import cv2 as cv
 
 import wandb
 
@@ -45,7 +50,7 @@ def divisible_by(num, den):
 
 # class
 
-class LVSM(Module):
+class LVSM(pl.LightningModule):
     def __init__(
         self,
         dim,
@@ -63,13 +68,20 @@ class LVSM(Module):
             add_value_residual = True,
             ff_glu = True,
         ),
-        perceptual_loss_weight = 0.5    # they use 0.5 for scene-level, 1.0 for object-level
+        perceptual_loss_weight = 0.5,    # they use 0.5 for scene-level, 1.0 for object-level
+        output_dir: str = "./outputs"
     ):
         super().__init__()
         assert divisible_by(max_image_size_width, patch_size)
         assert divisible_by(max_image_size_height, patch_size)
+        # prepare output path
+        self.ckpt_path = os.path.join(output_dir, "ckpt")
+        self.img_path = os.path.join(output_dir, "img")
+        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(self.ckpt_path, exist_ok=True)
+        os.makedirs(self.img_path, exist_ok=True)
         
-
+        
         # positional embeddings
 
         self.width_embed = nn.Parameter(torch.zeros(max_image_size_width // patch_size, dim))
@@ -138,7 +150,7 @@ class LVSM(Module):
 
         self._vgg = [vgg]
         return vgg.to(self.device)
-
+    
     def forward(
         self,
         input_images: Float[Tensor, 'b i {self._c} h w'],
@@ -215,6 +227,7 @@ class LVSM(Module):
 
         loss =  F.mse_loss(pred_target_images, target_images)
 
+        self.log("train/mes_loss", loss.item())
         perceptual_loss = self.zero
 
         if self.has_perceptual_loss:
@@ -224,6 +237,7 @@ class LVSM(Module):
             pred_target_image_vgg_feats = self.vgg(pred_target_images)
 
             perceptual_loss = F.mse_loss(target_image_vgg_feats, pred_target_image_vgg_feats)
+            self.log("train/perceptual_loss", perceptual_loss.item())
 
         total_loss = (
             loss +
@@ -234,3 +248,48 @@ class LVSM(Module):
             return total_loss
 
         return total_loss, (loss, perceptual_loss)
+    
+    def training_step(self, batch, batch_idx):
+        rgb = batch["rgb"]
+        rays = batch["rays"]
+        target_rgb = batch["target_rgb"]
+        target_rays = batch["target_rays"]
+        loss = self.forward(
+            input_images=rgb,
+            input_rays=rays,
+            target_rays=target_rays,
+            target_images=target_rgb
+        )
+        self.log("train/total_loss", loss.item())
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        rgb = batch["rgb"]
+        rays = batch["rays"]
+        target_rgb = batch["target_rgb"]
+        target_rays = batch["target_rays"]
+        val_rgb = self.forward(
+            input_images=rgb,
+            input_rays=rays,
+            target_rays=target_rays,
+        )
+        _, _, c, h, w = rgb.shape
+        output_rgb = np.zeros((h, w * 2, c), dtype=np.uint8)
+        target_rgb = (target_rgb.squeeze(0).detach().cpu().permute(1, 2, 0).numpy() * 255.).astype(np.uint8)
+        val_rgb = (val_rgb.squeeze(0).detach().cpu().permute(1, 2, 0).numpy() * 255.).astype(np.uint8)
+        
+        output_rgb[:, :w, :] = target_rgb
+        output_rgb[:, w:, :] = val_rgb
+        output_rgb = cv.cvtColor(output_rgb, cv.COLOR_RGB2BGR)
+        torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
+        cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
+        self.log(f"img/{self.global_step}", output_rgb)
+        return val_rgb
+
+    @rank_zero_only
+    def log(self, name, item):
+        wandb.log({name: item})
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer

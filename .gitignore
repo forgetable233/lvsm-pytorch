@@ -162,3 +162,7 @@ cython_debug/
 #.idea/
 .vscode/
 outputs/
+lightning_logs/
+wandb/
+*.jpg
+*.png

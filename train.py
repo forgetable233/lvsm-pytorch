@@ -5,6 +5,8 @@ import datetime
 
 import torch
 from torch.utils.data import DataLoader
+import torch.utils.data as data
+import pytorch_lightning as pl
 import argparse
 import cv2 as cv
 import numpy as np
@@ -19,57 +21,55 @@ def main(args):
     cur_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")
     output_dir = os.path.join(output_dir, cur_time)
     
-    ckpt_path = os.path.join(output_dir, "ckpt")
-    img_path = os.path.join(output_dir, "img")
-    os.makedirs(output_dir, exist_ok=True)
-    os.makedirs(ckpt_path, exist_ok=True)
-    os.makedirs(img_path, exist_ok=True)
     
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     
-    scannet = ScanNetDataset(
-        root="/run/determined/workdir/data/scannet/scans/scene0000_00/extract", 
-        device=device,
-        rgb_folder="color_resize",
-        K_name="intrinsic_color_resize.txt")
+    
+    dim = 256
+    patch_size = 32
+    depth = 6
     
     model = LVSM(
-        dim=256,
+        dim=dim,
         max_image_size_width=640,
         max_image_size_height=480,
-        patch_size=32,
-        depth=6,
-        max_input_images=4
-    ).to(device, dtype=torch.float32)
+        patch_size=patch_size,
+        depth=depth,
+        max_input_images=4,
+        output_dir=output_dir
+    )
     
-    loader = DataLoader(
-        dataset=scannet,
+    wandb.init(
+        project="lvsm",
+        name=f"dim_{dim}_path_size_{patch_size}_depth_{depth}"
+    )
+    
+    train_scannet = ScanNetDataset(
+        root="/run/determined/workdir/data/scannet/scans/scene0000_00/extract", 
+        rgb_folder="color_resize",
+        K_name="intrinsic_color_resize.txt"
+        )
+    
+    # train_length = int(len(train_scannet) * 0.8)
+    # val_length = len(train_scannet) - train_length
+    # seed = torch.Generator().manual_seed(42)
+    # train_set, valid_set = data.random_split(train_scannet, [train_length, val_length], generator=seed)
+    
+    train_loader = DataLoader(
+        dataset=train_scannet,
         batch_size=8,
         shuffle=False,
     )
     
-    opt = torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999), eps=1e-8)
+    val_loader = DataLoader(
+        dataset=train_scannet,
+        batch_size=1,
+        shuffle=False
+    )
     
     epo = 1000
     
-    for i in tqdm(range(epo), desc="training"):
-        for batch in loader:
-            model.train()
-            rgb = batch["rgb"].to(device)
-            rays = batch["rays"].to(device)
-            target_rgb = batch["target_rgb"].to(device)
-            target_rays = batch["target_rays"].to(device)
-            loss = model(
-                input_images = rgb,
-                input_rays = rays,
-                target_rays = target_rays,
-                target_images = target_rgb
-            )
-            loss.backward()
-            opt.step()
-            opt.zero_grad()
-        if i % 5 == 0:
-            torch.save(model.state_dict(), os.path.join(ckpt_path, f"{i}.pt"))
+    trainer = pl.Trainer(limit_train_batches=100, max_epochs=epo, check_val_every_n_epoch=20)
+    trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
 
 if __name__ == "__main__":

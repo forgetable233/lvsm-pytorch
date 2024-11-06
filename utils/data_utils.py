@@ -14,7 +14,6 @@ class ScanNetDataset(Dataset):
     
     def __init__(self,
                  root,
-                 device,
                  rgb_folder: str = "color",
                  pose_folder: str = "pose",
                  K_name: str = "intrinsic_color.txt",
@@ -23,7 +22,7 @@ class ScanNetDataset(Dataset):
         self.root = root
         self.rgb_folder = os.path.join(root, rgb_folder)
         self.pose_folder = os.path.join(root, pose_folder)
-        self.K: Float[Tensor, "3 3"] = torch.from_numpy(np.loadtxt(os.path.join(root, "intrinsic", K_name))).to(device)
+        self.K: Float[Tensor, "3 3"] = torch.from_numpy(np.loadtxt(os.path.join(root, "intrinsic", K_name)))
         
         self.len = len(os.listdir(self.rgb_folder))
         self.h, self.w, _ = cv.imread(os.path.join(self.rgb_folder, "0.jpg")).shape
@@ -61,7 +60,7 @@ class ScanNetDataset(Dataset):
         
         rgb: Float[Tensor, "i 3 H W"] = torch.from_numpy(
             np.stack([cv.cvtColor(cv.imread(rgb_img), cv.COLOR_BGR2RGB) for rgb_img in self.rgb_path[index:index + self.img_num]])).permute(0, 3, 1, 2)
-        rgb = rgb / 127.5 - 1
+        rgb = rgb / 255.
         pose: Float[Tensor, "i 4 4"] = torch.from_numpy(np.stack([np.loadtxt(pose_file) for pose_file in self.pose_path[index:index + self.img_num]]))
         rays = torch.zeros((self.img_num, self.h, self.w, 6))
         for i in range(pose.shape[0]):
@@ -73,7 +72,7 @@ class ScanNetDataset(Dataset):
         rays = rays.permute(0, 3, 1, 2)
         
         target_rgb = torch.from_numpy(cv.cvtColor(cv.imread(self.rgb_path[index + self.img_num]), cv.COLOR_BGR2RGB)).permute(2, 0, 1)
-        target_rgb = target_rgb / 127.5 - 1
+        target_rgb = target_rgb / 255.
         target_pose = torch.from_numpy(np.loadtxt(self.pose_path[index + self.img_num]))
         tar_rays = torch.zeros((self.h, self.w, 6))
         tar_rays[:, :, :3], tar_rays[:, :, 3:] = get_rays(
