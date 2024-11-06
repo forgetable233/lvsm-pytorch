@@ -1,5 +1,5 @@
 from __future__ import annotations
-from lvsm_pytorch.tensor_typing import Float, Int
+from lvsm_pytorch.tensor_typing import *
 
 from functools import wraps
 
@@ -34,7 +34,7 @@ def exists(v):
 def default(v, d):
     return v if exists(v) else d
 
-def lens_to_mask(lens: Int['b'], max_length: int):
+def lens_to_mask(lens: Int[Tensor, 'b'], max_length: int):
     seq = torch.arange(max_length, device = lens.device)
     return einx.less('b, n -> b n', lens, seq)
 
@@ -137,11 +137,11 @@ class LVSM(Module):
 
     def forward(
         self,
-        input_images: Float['b i {self._c} h w'],
-        input_rays: Float['b i 6 h w'],
-        target_rays: Float['b 6 h w'],
-        target_images: Float['b {self._c} h w'] | None = None,
-        num_input_images: Int['b'] | None = None,
+        input_images: Float[Tensor, 'b i {self._c} h w'],
+        input_rays: Float[Tensor, 'b i 6 h w'],
+        target_rays: Float[Tensor, 'b 6 h w'],
+        target_images: Float[Tensor, 'b {self._c} h w'] | None = None,
+        num_input_images: Int[Tensor, 'b'] | None = None,
         return_loss_breakdown = False
     ):
 

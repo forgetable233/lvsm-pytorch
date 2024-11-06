@@ -18,7 +18,7 @@ def main(args):
     model = LVSM(
         dim=512,
         max_image_size=1296,
-        patch_size=32,
+        patch_size=16,
         depth=6
     ).to(device, dtype=torch.float32)
     
@@ -30,6 +30,7 @@ def main(args):
     
     for batch in loader:
         print(batch["rgb"].shape)
+        print(batch["rays"].shape)
 
 
 if __name__ == "__main__":
