@@ -10,13 +10,15 @@ from torch import nn
 from torch.nn import Module, ModuleList
 import torch.nn.functional as F
 
+import wandb
+
 from x_transformers import Encoder
 
 import einx
 from einops.layers.torch import Rearrange
 from einops import rearrange, repeat, pack, unpack
 
-"""
+"""d
 ein notation:
 b - batch
 n - sequence
@@ -47,7 +49,8 @@ class LVSM(Module):
     def __init__(
         self,
         dim,
-        max_image_size,
+        max_image_size_width,
+        max_image_size_height,
         patch_size,
         depth = 12,
         heads = 8,
@@ -63,12 +66,14 @@ class LVSM(Module):
         perceptual_loss_weight = 0.5    # they use 0.5 for scene-level, 1.0 for object-level
     ):
         super().__init__()
-        assert divisible_by(max_image_size, patch_size)
+        assert divisible_by(max_image_size_width, patch_size)
+        assert divisible_by(max_image_size_height, patch_size)
+        
 
         # positional embeddings
 
-        self.width_embed = nn.Parameter(torch.zeros(max_image_size // patch_size, dim))
-        self.height_embed = nn.Parameter(torch.zeros(max_image_size // patch_size, dim))
+        self.width_embed = nn.Parameter(torch.zeros(max_image_size_width // patch_size, dim))
+        self.height_embed = nn.Parameter(torch.zeros(max_image_size_height // patch_size, dim))
         self.input_image_embed = nn.Parameter(torch.zeros(max_input_images, dim))
 
         nn.init.normal_(self.width_embed, std = 0.02)
