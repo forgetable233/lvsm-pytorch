@@ -47,7 +47,6 @@ class LVSM(Module):
     def __init__(
         self,
         dim,
-        *,
         max_image_size,
         patch_size,
         depth = 12,

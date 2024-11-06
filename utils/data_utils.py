@@ -14,7 +14,8 @@ class ScanNetDataset(Dataset):
     
     def __init__(self,
                  root,
-                 device) -> None:
+                 device,
+                 img_num: int = 4) -> None:
         super().__init__()
         self.device = device
         self.root = root
@@ -34,6 +35,7 @@ class ScanNetDataset(Dataset):
         self.directions: Float[Tensor, "H W 3"] = self.directions_unit_focals.clone()
         self.directions[:, :, :2] = self.directions[:, :, :2] / self.focal_length[:, None, None]
         
+        self.img_num = img_num
         self.rgb_path = []
         self.pose_path = []
         for i in range(self.len):
@@ -48,24 +50,38 @@ class ScanNetDataset(Dataset):
         return self.len
         
     def __getitem__(self, index) -> Any:
-        rgb: Float[Tensor, "3, H W"] = torch.from_numpy(cv.cvtColor(cv.imread(self.rgb_path[index]), cv.COLOR_BGR2RGB)).to(self.device).permute(2, 0, 1)
-        rgb = rgb / 127.5 - 1
-        pose: Float[Tensor, "4 4"] = torch.from_numpy(np.loadtxt(self.pose_path[index])).to(self.device)
+        if index + self.img_num >= self.len:
+            index = self.len - 2 - self.img_num
         
-        rays_o, rays_d = get_rays(
-            self.directions, pose, keepdim=True, normalize=True
+        rgb: Float[Tensor, "i 3 H W"] = torch.from_numpy(
+            np.stack([cv.cvtColor(cv.imread(rgb_img), cv.COLOR_BGR2RGB) for rgb_img in self.rgb_path[index:index + self.img_num]])).to(self.device).permute(0, 3, 1, 2)
+        rgb = rgb / 127.5 - 1
+        pose: Float[Tensor, "i 4 4"] = torch.from_numpy(np.stack([np.loadtxt(pose_file) for pose_file in self.pose_path[index:index + self.img_num]])).to(self.device)
+        rays = torch.zeros((self.img_num, self.h, self.w, 6)).to(self.device)
+        for i in range(pose.shape[0]):
+            rays_o, rays_d = get_rays(
+                self.directions, pose[i], keepdim=True, normalize=True
+            )
+            rays[i, :, :, :3] = rays_o
+            rays[i, :, :, 3:] = rays_d
+        rays = rays.to(self.device).permute(0, 3, 1, 2)
+        
+        target_rgb = torch.from_numpy(cv.cvtColor(cv.imread(self.rgb_path[index + self.img_num]), cv.COLOR_BGR2RGB)).to(self.device).permute(2, 0, 1)
+        target_rgb = target_rgb / 127.5 - 1
+        target_pose = torch.from_numpy(np.loadtxt(self.pose_path[index + self.img_num])).to(self.device)
+        tar_rays = torch.zeros((self.h, self.w, 6))
+        tar_rays[:, :, :3], tar_rays[:, :, 3:] = get_rays(
+            self.directions, target_pose, keepdim=True, normalize=True
         )
-        rays = torch.zeros((self.h, self.w, 6))
-        rays[:, :, :3] = rays_o
-        rays[:, :, 3:] = rays_d
-        rays = rays.to(self.device).permute(2, 0, 1)
+        
+        # target_rgb: Float[Tensor, "3 H W"] = torch.from_numpy()
         return {
             "rgb": rgb,
             "pose": pose,
             "K": self.K,
-            "rays_o": rays_o,
-            "rays_d": rays_d,
-            "rays": rays
+            "rays": rays,
+            "target_rgb": target_rgb,
+            "target_rays": tar_rays
         }
     
 def get_ray_direction(H: int, W: int, focal: float, use_pixel_centers: bool = True) -> Float[Tensor, "H W 3"]:

@@ -19,18 +19,29 @@ def main(args):
         dim=512,
         max_image_size=1296,
         patch_size=16,
-        depth=6
+        depth=6,
+        max_input_images=4
     ).to(device, dtype=torch.float32)
     
     loader = DataLoader(
         dataset=scannet,
         batch_size=32,
-        shuffle=True
+        shuffle=False
     )
     
     for batch in loader:
-        print(batch["rgb"].shape)
-        print(batch["rays"].shape)
+        rgb = batch["rgb"]
+        rays = batch["rays"]
+        target_rgb = batch["target_rgb"]
+        target_rays = batch["target_rays"]
+        loss = model(
+            input_images = rgb,
+            input_rays = rays,
+            target_rays = target_rays,
+            target_images = target_rgb
+        )
+        exit()
+        
 
 
 if __name__ == "__main__":
