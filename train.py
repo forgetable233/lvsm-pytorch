@@ -30,53 +30,41 @@ def main(cfg: DictConfig):
     
     if cfg.logger.log:
         os.makedirs(output_dir, exist_ok=True)
-        
-    
+    # prepare model     
     model_params = cfg.model
-   
-   
     model = LVSM(
         model_params,
         output_dir=output_dir
     )
-    if cfg.logger.use_wandb:
-        wandb.init(
-            project=cfg.logger.wandb.project,
-            name=cfg.logger.wandb.name
-        )
     
-    train_scannet = ScanNetDataset(
-        root="/run/determined/workdir/data/scannet/scans/scene0000_00/extract", 
-        rgb_folder="color_resize",
-        K_name="intrinsic_color_resize.txt"
-        )
-    
-    # train_length = int(len(train_scannet) * 0.8)
-    # val_length = len(train_scannet) - train_length
-    # seed = torch.Generator().manual_seed(42)
-    # train_set, valid_set = data.random_split(train_scannet, [train_length, val_length], generator=seed)
-    
+    # prepare dataset
+    data_params = cfg.data
+    train_scannet = ScanNetDataset(**data_params)
     train_loader = DataLoader(
         dataset=train_scannet,
         batch_size=1,
         shuffle=False,
     )
-    
     val_loader = DataLoader(
         dataset=train_scannet,
         batch_size=1,
         shuffle=False
     )
     
-    epo = 2000
+    # prepare train params
+    train_params = cfg.train
+    if train_params.resume:
+        assert os.path.exists(train_params.ckpt)
+        model.load_state_dict(train_params.ckpt)
     
-    trainer = pl.Trainer(limit_train_batches=600, max_epochs=epo, check_val_every_n_epoch=100)
+    if cfg.logger.log and cfg.logger.use_wandb:
+        wandb.init(
+            project=cfg.logger.wandb.project,
+            name=cfg.logger.wandb.name
+        )
+    trainer = pl.Trainer(**train_params.trainer)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--bs", type=int, default=32)
-    # parser.add_argument("--output_dir", type=str, default="outputs")
-    # args = parser.parse_args()
     main()

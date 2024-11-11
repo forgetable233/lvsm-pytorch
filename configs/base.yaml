@@ -1,14 +1,15 @@
 data:
+  data_type: "scannet"
+  root: "/run/determined/workdir/data/scannet/scans/scene0000_00/extract"
+  rgb_folder: "color"
+  K_name: "intrinsic_color.txt"
   width: 256
   height: 256
   batch_size: 1
-  path: ""
+  img_num: 4
   data_params: "w_${data.width}_h_${data.height}_bs_${data.batch_size}"
 
 model:
-  seed: 42
-  resume: False
-  ckpt: ""
   patch_size: 16
   max_input_images: 4
   channels: 3
@@ -24,19 +25,25 @@ model:
     use_rmsnorm: True
     add_value_residual: True
     ff_glu: True
-  model_params: "dp_${model.decoder_kwargs.depth}_dim_${model.decoder_kwargs.dim}_p_${model.patch_size}"
   log: ${logger.log}
   use_wandb: ${logger.use_wandb}
+  lr: ${train.trainer.lr}
+  model_params: "dp_${model.decoder_kwargs.depth}_dim_${model.decoder_kwargs.dim}_p_${model.patch_size}"
 
-trainer:
-  epoch: 2000
-  val_check_interval: 100
-  max_train_batch: 200
+train:
+  seed: 42
+  resume: False
+  ckpt: ""
+  trainer:
+    limit_train_batches: 200
+    check_val_every_n_epoch: 100
+    max_epochs: 2000
+    lr: 4e-4
 
 logger:
   log: False
   output_dir: "./outputs"
-  name: "${model.model_params}_${data.data_params}_epo_${trainer.epoch}"
+  name: "${model.model_params}_${data.data_params}_epo_${train.trainer.max_epochs}"
   use_wandb: False
   wandb:
     project: "lvsm"

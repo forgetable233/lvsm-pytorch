@@ -17,21 +17,28 @@ class ScanNetDataset(Dataset):
                  rgb_folder: str = "color",
                  pose_folder: str = "pose",
                  K_name: str = "intrinsic_color.txt",
-                 img_num: int = 4) -> None:
+                 img_num: int = 4,
+                 width: int = 256,
+                 height: int = 256,
+                 stage: str = "train",
+                 **kwargs) -> None:
         super().__init__()
         self.root = root
         self.rgb_folder = os.path.join(root, rgb_folder)
         self.pose_folder = os.path.join(root, pose_folder)
         self.K: Float[Tensor, "3 3"] = torch.from_numpy(np.loadtxt(os.path.join(root, "intrinsic", K_name)))
         
+        self.width, self.height = width, height
+        
         self.len = len(os.listdir(self.rgb_folder))
-        self.h, self.w, _ = cv.imread(os.path.join(self.rgb_folder, "0.jpg")).shape
+        self.img_h, self.img_w, _ = cv.imread(os.path.join(self.rgb_folder, "0.jpg")).shape
+        self.resize_K()
         
-        self.fovy = 2 * torch.atan(self.h / (2 * self.K[1, 1]))
-        self.fovx = 2 * torch.atan(self.w / (2 * self.K[0, 0]))
+        self.fovy = 2 * torch.atan(self.height / (2 * self.K[1, 1]))
+        self.fovx = 2 * torch.atan(self.width / (2 * self.K[0, 0]))
         
-        self.focal_length = torch.tensor([0.5 * self.h / torch.tan(0.5 * self.fovy)])
-        self.directions_unit_focals: Float[Tensor, "H W 3"] = get_ray_direction(self.h, self.w, focal=1.0)
+        self.focal_length = torch.tensor([0.5 * self.height / torch.tan(0.5 * self.fovy)])
+        self.directions_unit_focals: Float[Tensor, "H W 3"] = get_ray_direction(self.height, self.width, focal=1.0)
         
         self.directions: Float[Tensor, "H W 3"] = self.directions_unit_focals.clone()
         self.directions[:, :, :2] = self.directions[:, :, :2] / self.focal_length[:, None, None]
@@ -50,6 +57,14 @@ class ScanNetDataset(Dataset):
             assert os.path.exists(pose_path)
             self.rgb_path.append(rgb_path)
             self.pose_path.append(pose_path)
+        
+    def resize_K(self):
+        alpha_y = self.height / self.img_h
+        alpha_x = self.width / self.img_w
+        self.K[0, 0] *= alpha_x
+        self.K[0, 2] *= alpha_x
+        self.K[1, 1] *= alpha_y
+        self.K[1, 2] *= alpha_y
     
     def __len__(self):
         return self.len
@@ -59,10 +74,10 @@ class ScanNetDataset(Dataset):
             index = self.len - 2 - self.img_num
         
         rgb: Float[Tensor, "i 3 H W"] = torch.from_numpy(
-            np.stack([cv.cvtColor(cv.imread(rgb_img), cv.COLOR_BGR2RGB) for rgb_img in self.rgb_path[index:index + self.img_num]])).permute(0, 3, 1, 2)
+            np.stack([cv.cvtColor(cv.resize(cv.imread(rgb_img), (self.width, self.height)), cv.COLOR_BGR2RGB) for rgb_img in self.rgb_path[index:index + self.img_num]])).permute(0, 3, 1, 2)
         rgb = rgb / 255.
         pose: Float[Tensor, "i 4 4"] = torch.from_numpy(np.stack([np.loadtxt(pose_file) for pose_file in self.pose_path[index:index + self.img_num]]))
-        rays = torch.zeros((self.img_num, self.h, self.w, 6))
+        rays = torch.zeros((self.img_num, self.height, self.width, 6))
         for i in range(pose.shape[0]):
             rays_o, rays_d = get_rays(
                 self.directions, pose[i], keepdim=True, normalize=True
@@ -71,10 +86,10 @@ class ScanNetDataset(Dataset):
             rays[i, :, :, 3:] = rays_d
         rays = rays.permute(0, 3, 1, 2)
         
-        target_rgb = torch.from_numpy(cv.cvtColor(cv.imread(self.rgb_path[index + self.img_num]), cv.COLOR_BGR2RGB)).permute(2, 0, 1)
+        target_rgb = torch.from_numpy(cv.cvtColor(cv.resize(cv.imread(self.rgb_path[index + self.img_num]), (self.width, self.height)), cv.COLOR_BGR2RGB)).permute(2, 0, 1)
         target_rgb = target_rgb / 255.
         target_pose = torch.from_numpy(np.loadtxt(self.pose_path[index + self.img_num]))
-        tar_rays = torch.zeros((self.h, self.w, 6))
+        tar_rays = torch.zeros((self.height, self.width, 6))
         tar_rays[:, :, :3], tar_rays[:, :, 3:] = get_rays(
             self.directions, target_pose, keepdim=True, normalize=True
         )
