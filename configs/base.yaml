@@ -1,0 +1,37 @@
+data:
+  width: 256
+  height: 256
+  batch_size: 1
+  path: ""
+  data_params: "w_${data.width}_h_${data.height}_bs_${data.batch_size}"
+
+model:
+  resume: False
+  ckpt: ""
+  depth: 6
+  dim: 256
+  patch_size: 16
+  img_num: 4
+  heads: 8
+  channels: 3
+  rand_input_img_embed: True
+  perceptual_loss_weight: 0.5
+  decoder_kwargs:
+    use_rmsnorm: True,
+    add_value_residual: True
+    ff_glu: True
+  model_params: "dp_${model.depth}_dim_${model.dim}_p_${model.patch_size}"
+
+trainer:
+  epoch: 2000
+  val_check_interval: 100
+  max_train_batch: 200
+
+logger:
+  log: False
+  output_dir: "./outputs"
+  name: "${model.model_params}_${data.data_params}_epo_${trainer.epoch}"
+  use_wandb: False
+  wandb:
+    project: "lvsm"
+    name: "${logger.name}"

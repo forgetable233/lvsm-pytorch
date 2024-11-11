@@ -69,7 +69,8 @@ class LVSM(pl.LightningModule):
             ff_glu = True,
         ),
         perceptual_loss_weight = 0.5,    # they use 0.5 for scene-level, 1.0 for object-level
-        output_dir: str = "./outputs"
+        output_dir: str = "./outputs",
+        **kwargs
     ):
         super().__init__()
         assert divisible_by(max_image_size_width, patch_size)
@@ -77,7 +78,6 @@ class LVSM(pl.LightningModule):
         # prepare output path
         self.ckpt_path = os.path.join(output_dir, "ckpt")
         self.img_path = os.path.join(output_dir, "img")
-        os.makedirs(output_dir, exist_ok=True)
         os.makedirs(self.ckpt_path, exist_ok=True)
         os.makedirs(self.img_path, exist_ok=True)
         
