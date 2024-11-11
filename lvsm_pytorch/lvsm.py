@@ -14,7 +14,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_only
 import numpy as np
 import cv2 as cv
-
+from omegaconf import DictConfig, OmegaConf
 import wandb
 
 from x_transformers import Encoder
@@ -51,53 +51,64 @@ def divisible_by(num, den):
 # class
 
 class LVSM(pl.LightningModule):
+    # def __init__(
+    #     self,
+    #     dim,
+    #     max_image_size_width,
+    #     max_image_size_height,
+    #     patch_size,
+    #     depth = 12,
+    #     heads = 8,
+    #     max_input_images = 32,
+    #     dim_head = 64,
+    #     channels = 3,
+    #     rand_input_image_embed = True,
+    #     decoder_kwargs: dict = dict(
+    #         use_rmsnorm = True,
+    #         add_value_residual = True,
+    #         ff_glu = True,
+    #     ),
+    #     perceptual_loss_weight = 0.5,    # they use 0.5 for scene-level, 1.0 for object-level
+    #     output_dir: str = "./outputs",
+    #     **kwargs
+    # ):
     def __init__(
         self,
-        dim,
-        max_image_size_width,
-        max_image_size_height,
-        patch_size,
-        depth = 12,
-        heads = 8,
-        max_input_images = 32,
-        dim_head = 64,
-        channels = 3,
-        rand_input_image_embed = True,
-        decoder_kwargs: dict = dict(
-            use_rmsnorm = True,
-            add_value_residual = True,
-            ff_glu = True,
-        ),
-        perceptual_loss_weight = 0.5,    # they use 0.5 for scene-level, 1.0 for object-level
+        model_params: DictConfig,
         output_dir: str = "./outputs",
-        **kwargs
     ):
         super().__init__()
-        assert divisible_by(max_image_size_width, patch_size)
-        assert divisible_by(max_image_size_height, patch_size)
+        patch_size = model_params.patch_size
+        max_img_size_width = model_params.width
+        max_img_size_height = model_params.height
+        assert divisible_by(max_img_size_width, patch_size)
+        assert divisible_by(max_img_size_height, patch_size)
+        self.log = model_params.log
+        self.use_wandb = model_params.use_wandb
         # prepare output path
-        self.ckpt_path = os.path.join(output_dir, "ckpt")
-        self.img_path = os.path.join(output_dir, "img")
-        os.makedirs(self.ckpt_path, exist_ok=True)
-        os.makedirs(self.img_path, exist_ok=True)
-        
+        if self.log:
+            self.ckpt_path = os.path.join(output_dir, "ckpt")
+            self.img_path = os.path.join(output_dir, "img")
+            os.makedirs(self.ckpt_path, exist_ok=True)
+            os.makedirs(self.img_path, exist_ok=True)
         
         # positional embeddings
-
-        self.width_embed = nn.Parameter(torch.zeros(max_image_size_width // patch_size, dim))
-        self.height_embed = nn.Parameter(torch.zeros(max_image_size_height // patch_size, dim))
+        dim = model_params.decoder_kwargs.dim
+        max_input_images = model_params.max_input_images
+        self.width_embed = nn.Parameter(torch.zeros(max_img_size_width // patch_size, dim))
+        self.height_embed = nn.Parameter(torch.zeros(max_img_size_height // patch_size, dim))
         self.input_image_embed = nn.Parameter(torch.zeros(max_input_images, dim))
 
         nn.init.normal_(self.width_embed, std = 0.02)
         nn.init.normal_(self.height_embed, std = 0.02)
         nn.init.normal_(self.input_image_embed, std = 0.02)
 
-        self.rand_input_image_embed = rand_input_image_embed
+        self.rand_input_image_embed = model_params.rand_input_image_embed
 
         # raw data to patch tokens for attention
 
         patch_size_sq = patch_size ** 2
-
+        channels = model_params.channels
         self.input_to_patch_tokens = nn.Sequential(
             Rearrange('b i c (h p1) (w p2) -> b i h w (c p1 p2)', p1 = patch_size, p2 = patch_size),
             nn.Linear((6 + channels) * patch_size_sq, dim)
@@ -107,21 +118,17 @@ class LVSM(pl.LightningModule):
             Rearrange('b c (h p1) (w p2) -> b h w (c p1 p2)', p1 = patch_size, p2 = patch_size),
             nn.Linear(6 * patch_size_sq, dim)
         )
-
+        # depth, heads, dim_head = model_params.depth, model_params.heads, model_params.dim_head
         self.decoder = Encoder(
-            dim = dim,
-            depth = depth,
-            heads = heads,
-            attn_dim_head = dim_head,
-            **decoder_kwargs
+            **model_params.decoder_kwargs
         )
-
+        
         self.target_unpatchify_to_image = nn.Sequential(
             nn.Linear(dim, channels * patch_size_sq),
             nn.Sigmoid(),
             Rearrange('b h w (c p1 p2) -> b c (h p1) (w p2)', p1 = patch_size, p2 = patch_size, c = channels)
         )
-
+        perceptual_loss_weight = model_params.perceptual_loss_weight
         self.has_perceptual_loss = perceptual_loss_weight > 0. and channels == 3
         self.perceptual_loss_weight = perceptual_loss_weight
 
@@ -226,8 +233,8 @@ class LVSM(pl.LightningModule):
             return pred_target_images
 
         loss =  F.mse_loss(pred_target_images, target_images)
-
-        self.log("train/mes_loss", loss.item())
+        if self.log and self.use_wandb:
+            self.wandb_log("train/mes_loss", loss.item())
         perceptual_loss = self.zero
 
         if self.has_perceptual_loss:
@@ -237,7 +244,8 @@ class LVSM(pl.LightningModule):
             pred_target_image_vgg_feats = self.vgg(pred_target_images)
 
             perceptual_loss = F.mse_loss(target_image_vgg_feats, pred_target_image_vgg_feats)
-            self.log("train/perceptual_loss", perceptual_loss.item())
+            if self.log and self.use_wandb:
+                self.wandb_log("train/perceptual_loss", perceptual_loss.item())
 
         total_loss = (
             loss +
@@ -260,7 +268,8 @@ class LVSM(pl.LightningModule):
             target_rays=target_rays,
             target_images=target_rgb
         )
-        self.log("train/total_loss", loss.item())
+        if self.log and self.use_wandb:
+            self.wandb_log("train/total_loss", loss.item())
         return loss
     
     def validation_step(self, batch, batch_idx):
@@ -281,13 +290,14 @@ class LVSM(pl.LightningModule):
         output_rgb[:, :w, :] = target_rgb
         output_rgb[:, w:, :] = val_rgb
         output_rgb = cv.cvtColor(output_rgb, cv.COLOR_RGB2BGR)
-        torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
-        cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
+        if self.log:
+            torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
+            cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
         # self.log(f"img/{self.global_step}", output_rgb)
         return val_rgb
 
     @rank_zero_only
-    def log(self, name, item):
+    def wandb_log(self, name, item):
         wandb.log({name: item})
     
     def configure_optimizers(self):

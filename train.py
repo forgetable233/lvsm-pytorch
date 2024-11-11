@@ -33,23 +33,17 @@ def main(cfg: DictConfig):
         
     
     model_params = cfg.model
-    dim = model_params.dim
-    patch_size = model_params.patch_size
-    depth = model_params.depth
-    img_num = model_params.img_num
-    
-    data_params = cfg.data
-    max_img_width = data_params.width
-    max_img_height = data_params.height
-    bs = data_params.batch_size
+   
+   
     model = LVSM(
-        model_params
+        model_params,
+        output_dir=output_dir
     )
-    
-    wandb.init(
-        project="lvsm",
-        name=f"dim_{dim}_path_size_{patch_size}_depth_{depth}"
-    )
+    if cfg.logger.use_wandb:
+        wandb.init(
+            project=cfg.logger.wandb.project,
+            name=cfg.logger.wandb.name
+        )
     
     train_scannet = ScanNetDataset(
         root="/run/determined/workdir/data/scannet/scans/scene0000_00/extract", 

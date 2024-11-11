@@ -6,21 +6,27 @@ data:
   data_params: "w_${data.width}_h_${data.height}_bs_${data.batch_size}"
 
 model:
+  seed: 42
   resume: False
   ckpt: ""
-  depth: 6
-  dim: 256
   patch_size: 16
-  img_num: 4
-  heads: 8
+  max_input_images: 4
   channels: 3
-  rand_input_img_embed: True
-  perceptual_loss_weight: 0.5
+  width: ${data.width}
+  height: ${data.height}
+  rand_input_image_embed: True
+  perceptual_loss_weight: 0.5 # they use 0.5 for scene-level, 1.0 for object-level
   decoder_kwargs:
-    use_rmsnorm: True,
+    dim: 256
+    depth: 6
+    heads: 8
+    attn_dim_head: 64
+    use_rmsnorm: True
     add_value_residual: True
     ff_glu: True
-  model_params: "dp_${model.depth}_dim_${model.dim}_p_${model.patch_size}"
+  model_params: "dp_${model.decoder_kwargs.depth}_dim_${model.decoder_kwargs.dim}_p_${model.patch_size}"
+  log: ${logger.log}
+  use_wandb: ${logger.use_wandb}
 
 trainer:
   epoch: 2000
