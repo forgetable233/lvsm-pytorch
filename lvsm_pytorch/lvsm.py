@@ -83,10 +83,10 @@ class LVSM(pl.LightningModule):
         max_img_size_height = model_params.height
         assert divisible_by(max_img_size_width, patch_size)
         assert divisible_by(max_img_size_height, patch_size)
-        self.log = model_params.log
+        self.use_log = model_params.log
         self.use_wandb = model_params.use_wandb
         # prepare output path
-        if self.log:
+        if self.use_log:
             self.ckpt_path = os.path.join(output_dir, "ckpt")
             self.img_path = os.path.join(output_dir, "img")
             os.makedirs(self.ckpt_path, exist_ok=True)
@@ -234,8 +234,8 @@ class LVSM(pl.LightningModule):
             return pred_target_images
 
         loss =  F.mse_loss(pred_target_images, target_images)
-        if self.log and self.use_wandb:
-            self.wandb_log("train/mes_loss", loss.item())
+        if self.use_log and self.use_wandb:
+            self.log("train/mes_loss", loss.item())
         perceptual_loss = self.zero
 
         if self.has_perceptual_loss:
@@ -245,8 +245,8 @@ class LVSM(pl.LightningModule):
             pred_target_image_vgg_feats = self.vgg(pred_target_images)
 
             perceptual_loss = F.mse_loss(target_image_vgg_feats, pred_target_image_vgg_feats)
-            if self.log and self.use_wandb:
-                self.wandb_log("train/perceptual_loss", perceptual_loss.item())
+            if self.use_log and self.use_wandb:
+                self.log("train/perceptual_loss", perceptual_loss.item())
 
         total_loss = (
             loss +
@@ -269,15 +269,15 @@ class LVSM(pl.LightningModule):
             target_rays=target_rays,
             target_images=target_rgb
         )
-        if self.log and self.use_wandb:
-            self.wandb_log("train/total_loss", loss.item())
+        if self.use_log and self.use_wandb:
+            self.log("train/total_loss", loss.item())
         return loss
     
     def validation_step(self, batch, batch_idx):
-        rgb = batch["rgb"]
-        rays = batch["rays"]
-        target_rgb = batch["target_rgb"]
-        target_rays = batch["target_rays"]
+        rgb = batch["rgb"][0].unsqueeze(0)
+        rays = batch["rays"][0].unsqueeze(0)
+        target_rgb = batch["target_rgb"][0].unsqueeze(0)
+        target_rays = batch["target_rays"][0].unsqueeze(0)
         val_rgb = self.forward(
             input_images=rgb,
             input_rays=rays,
@@ -291,10 +291,10 @@ class LVSM(pl.LightningModule):
         output_rgb[:, :w, :] = target_rgb
         output_rgb[:, w:, :] = val_rgb
         output_rgb = cv.cvtColor(output_rgb, cv.COLOR_RGB2BGR)
-        if self.log:
+        if self.use_log:
             torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
             cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
-        # self.log(f"img/{self.global_step}", output_rgb)
+        # self.use_log(f"img/{self.global_step}", output_rgb)
         return val_rgb
 
     @rank_zero_only

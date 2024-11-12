@@ -7,6 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 import torch.utils.data as data
 import pytorch_lightning as pl
+from pytorch_lightning.loggers import WandbLogger
 import argparse
 import cv2 as cv
 import numpy as np
@@ -42,13 +43,16 @@ def main(cfg: DictConfig):
     train_scannet = ScanNetDataset(**data_params)
     train_loader = DataLoader(
         dataset=train_scannet,
-        batch_size=1,
+        batch_size=32,
         shuffle=False,
+        num_workers=16
     )
+    
     val_loader = DataLoader(
         dataset=train_scannet,
-        batch_size=1,
-        shuffle=False
+        batch_size=32,
+        shuffle=False,
+        num_workers=16
     )
     
     # prepare train params
@@ -58,13 +62,11 @@ def main(cfg: DictConfig):
         model.load_state_dict(train_params.ckpt)
     
     if cfg.logger.log and cfg.logger.use_wandb:
-        wandb.init(
-            project=cfg.logger.wandb.project,
-            name=cfg.logger.wandb.name
-        )
-    trainer = pl.Trainer(**train_params.trainer)
+        wandb_logger = WandbLogger(project=cfg.logger.wandb.project, name=cfg.logger.wandb.name)
+        trainer = pl.Trainer(logger=wandb_logger, **train_params.trainer)
+    else:
+        trainer = pl.Trainer(**train_params.trainer)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-
 
 if __name__ == "__main__":
     main()

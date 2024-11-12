@@ -167,3 +167,4 @@ wandb/
 *.jpg
 *.png
 temp/*
+lvsm/

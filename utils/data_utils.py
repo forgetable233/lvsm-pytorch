@@ -11,7 +11,6 @@ import numpy as np
 from lvsm_pytorch.tensor_typing import *
 
 class ScanNetDataset(Dataset):
-    
     def __init__(self,
                  root,
                  rgb_folder: str = "color",

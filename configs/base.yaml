@@ -1,8 +1,8 @@
 data:
   data_type: "scannet"
   root: "/run/determined/workdir/data/scannet/scans/scene0000_00/extract"
-  rgb_folder: "color"
-  K_name: "intrinsic_color.txt"
+  rgb_folder: "color_resize"
+  K_name: "intrinsic_color_resize.txt"
   width: 256
   height: 256
   batch_size: 1
@@ -19,7 +19,7 @@ model:
   perceptual_loss_weight: 0.5 # they use 0.5 for scene-level, 1.0 for object-level
   decoder_kwargs:
     dim: 256
-    depth: 6
+    depth: 12
     heads: 8
     attn_dim_head: 64
     use_rmsnorm: True
@@ -27,24 +27,24 @@ model:
     ff_glu: True
   log: ${logger.log}
   use_wandb: ${logger.use_wandb}
-  lr: ${train.trainer.lr}
+  lr: ${train.lr}
   model_params: "dp_${model.decoder_kwargs.depth}_dim_${model.decoder_kwargs.dim}_p_${model.patch_size}"
 
 train:
   seed: 42
   resume: False
   ckpt: ""
+  lr: 4e-4
   trainer:
     limit_train_batches: 200
     check_val_every_n_epoch: 100
-    max_epochs: 2000
-    lr: 4e-4
+    max_epochs: 5000
 
 logger:
-  log: False
+  log: True
   output_dir: "./outputs"
   name: "${model.model_params}_${data.data_params}_epo_${train.trainer.max_epochs}"
-  use_wandb: False
+  use_wandb: True
   wandb:
     project: "lvsm"
     name: "${logger.name}"
