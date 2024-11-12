@@ -19,8 +19,8 @@ from omegaconf import DictConfig, OmegaConf
 from lvsm_pytorch import LVSM
 from utils.data_utils import ScanNetDataset
 from dataset.data_module import DataModule
-from dataset.dataset_re10k import DatasetRe10kCfg
-from config import load_typed_root_config
+from dataset.dataset_re10k import DatasetRe10kCfg, Re10kDataset, Re10kDatasetSmall
+from config import load_typed_root_config, RootCfg
 
 @hydra.main(version_base=None, config_path="./configs", config_name="base")
 def main(cfg: DictConfig):
@@ -34,9 +34,10 @@ def main(cfg: DictConfig):
     
     if cfg.logger.log:
         os.makedirs(output_dir, exist_ok=True)
-
-    cfg = load_typed_root_config(cfg)
-    print(cfg)
+    OmegaConf.resolve(cfg)
+    rootcfg: RootCfg = load_typed_root_config(cfg)
+    testDataset = Re10kDatasetSmall(rootcfg.dataset, "train")
+    print(len(testDataset))
     exit()
     # prepare model     
     model_params = cfg.model
