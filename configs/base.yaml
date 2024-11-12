@@ -1,5 +1,5 @@
 defaults:
-  - dataset: re10k
+  - dataset: scannet
 
 model:
   patch_size: 16

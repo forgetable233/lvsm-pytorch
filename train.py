@@ -31,14 +31,8 @@ def main(cfg: DictConfig):
     test_name = f"{test_name}_{cur_time}"
     output_dir = os.path.join(output_dir, test_name)
     OmegaConf.update(cfg, "logger.output_dir", output_dir)
-    
     if cfg.logger.log:
         os.makedirs(output_dir, exist_ok=True)
-    OmegaConf.resolve(cfg)
-    rootcfg: RootCfg = load_typed_root_config(cfg)
-    testDataset = Re10kDatasetSmall(rootcfg.dataset, "train")
-    print(len(testDataset))
-    exit()
     # prepare model     
     model_params = cfg.model
     model = LVSM(
@@ -47,7 +41,7 @@ def main(cfg: DictConfig):
     )
     
     # prepare dataset
-    data_params = cfg.data
+    data_params = cfg.dataset
     train_scannet = ScanNetDataset(**data_params)
     train_loader = DataLoader(
         dataset=train_scannet,
@@ -62,7 +56,6 @@ def main(cfg: DictConfig):
         shuffle=False,
         num_workers=16
     )
-    
     # prepare train params
     train_params = cfg.train
     if train_params.resume:
