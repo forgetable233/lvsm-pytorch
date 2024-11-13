@@ -1,10 +1,10 @@
 import os
-from typing import Any
+from typing import Any, Iterator, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, IterableDataset
 import cv2 as cv
 import numpy as np
 
@@ -85,22 +85,24 @@ class ScanNetDataset(Dataset):
             rays[i, :, :, 3:] = rays_d
         rays = rays.permute(0, 3, 1, 2)
         
-        target_rgb = torch.from_numpy(cv.cvtColor(cv.resize(cv.imread(self.rgb_path[index + self.img_num]), (self.width, self.height)), cv.COLOR_BGR2RGB)).permute(2, 0, 1)
-        target_rgb = target_rgb / 255.
-        target_pose = torch.from_numpy(np.loadtxt(self.pose_path[index + self.img_num]))
-        tar_rays = torch.zeros((self.height, self.width, 6))
-        tar_rays[:, :, :3], tar_rays[:, :, 3:] = get_rays(
-            self.directions, target_pose, keepdim=True, normalize=True
-        )
-        tar_rays = tar_rays.permute(2, 0, 1)
+        contex_idx = torch.tensor([0, -1])
+        target_idx = torch.tensor([1, 2])
+        # target_rgb = torch.from_numpy(cv.cvtColor(cv.resize(cv.imread(self.rgb_path[index + self.img_num]), (self.width, self.height)), cv.COLOR_BGR2RGB)).permute(2, 0, 1)
+        # target_rgb = target_rgb / 255.
+        # target_pose = torch.from_numpy(np.loadtxt(self.pose_path[index + self.img_num]))
+        # tar_rays = torch.zeros((self.height, self.width, 6))
+        # tar_rays[:, :, :3], tar_rays[:, :, 3:] = get_rays(
+        #     self.directions, target_pose, keepdim=True, normalize=True
+        # )
+        # tar_rays = tar_rays.permute(2, 0, 1)
         # target_rgb: Float[Tensor, "3 H W"] = torch.from_numpy()
         return {
-            "rgb": rgb,
+            "rgb": rgb[contex_idx],                 # b c h w
             "pose": pose,
             "K": self.K,
-            "rays": rays,
-            "target_rgb": target_rgb,
-            "target_rays": tar_rays
+            "rays": rays[contex_idx],               # b c h w
+            "target_rgb": rgb[target_idx],          # b c h w
+            "target_rays": rays[target_idx]         # b c h w
         }
     
 def get_ray_direction(H: int, W: int, focal: float, use_pixel_centers: bool = True) -> Float[Tensor, "H W 3"]:
@@ -142,4 +144,26 @@ def get_rays(
     if not keepdim:
         rays_o, rays_d = rays_o.reshape(-1, 3), rays_d.reshape(-1, 3)
     return rays_o, rays_d
+
+class ValidationWrapper(Dataset):
+    dataset: Dataset
+    dataset_iterator: Optional[Iterator]
+    length: int
+    
+    def __init__(self, dataset: Dataset, length: int) -> None:
+        super().__init__()
+        self.dataset = dataset
+        self.length = length
+        self.dataset_iterator = None
+    
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        if isinstance(self.dataset, IterableDataset):
+            if self.dataset_iterator is None:
+                self.dataset_iterator = iter(self.dataset)
+            return next(self.dataset_iterator)
+        random_index = torch.randint(0, len(self.dataset), tuple())
+        return self.dataset[random_index.item()]
     

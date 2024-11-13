@@ -2,7 +2,6 @@ import os
 
 import torch
 import pytorch_lightning as pl
-from lightning.pytorch import LightningDataModule
 
 import cv2 as cv
 import numpy as np
@@ -25,7 +24,7 @@ class DataLoaderCfg:
     test: DataLoaderStageCfg
     val: DataLoaderStageCfg
 
-class DataModule(LightningDataModule):
+class DataModule(pl.LightningDataModule):
     dataset_cfg: DatasetRe10kCfg
     data_loader_cfg: DataLoaderCfg
     global_rank: int

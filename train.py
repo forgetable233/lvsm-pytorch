@@ -17,7 +17,7 @@ from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
 
 from lvsm_pytorch import LVSM
-from utils.data_utils import ScanNetDataset
+from utils.data_utils import ScanNetDataset, ValidationWrapper
 from dataset.data_module import DataModule
 from dataset.dataset_re10k import DatasetRe10kCfg, Re10kDataset, Re10kDatasetSmall
 from config import load_typed_root_config, RootCfg
@@ -43,19 +43,21 @@ def main(cfg: DictConfig):
     # prepare dataset
     data_params = cfg.dataset
     train_scannet = ScanNetDataset(**data_params)
+    val_dataset = ValidationWrapper(train_scannet, 1)
     train_loader = DataLoader(
         dataset=train_scannet,
-        batch_size=32,
+        batch_size=8,
         shuffle=False,
         num_workers=16
     )
     
     val_loader = DataLoader(
-        dataset=train_scannet,
-        batch_size=32,
+        dataset=val_dataset,
+        batch_size=1,
         shuffle=False,
-        num_workers=16
+        num_workers=1
     )
+    
     # prepare train params
     train_params = cfg.train
     if train_params.resume:

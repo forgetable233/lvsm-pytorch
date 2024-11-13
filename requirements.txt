@@ -1,0 +1,10 @@
+torch
+pytorch-lightning
+torchvision
+x_transformers
+wandb
+opencv-python
+hydra-core
+accelerate
+jaxtyping
+dacite

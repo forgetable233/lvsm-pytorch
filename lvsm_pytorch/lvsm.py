@@ -115,7 +115,7 @@ class LVSM(pl.LightningModule):
         )
 
         self.target_rays_to_patch_tokens = nn.Sequential(
-            Rearrange('b c (h p1) (w p2) -> b h w (c p1 p2)', p1 = patch_size, p2 = patch_size),
+            Rearrange('b i c (h p1) (w p2) -> b i h w (c p1 p2)', p1 = patch_size, p2 = patch_size),
             nn.Linear(6 * patch_size_sq, dim)
         )
         # depth, heads, dim_head = model_params.depth, model_params.heads, model_params.dim_head
@@ -126,7 +126,7 @@ class LVSM(pl.LightningModule):
         self.target_unpatchify_to_image = nn.Sequential(
             nn.Linear(dim, channels * patch_size_sq),
             nn.Sigmoid(),
-            Rearrange('b h w (c p1 p2) -> b c (h p1) (w p2)', p1 = patch_size, p2 = patch_size, c = channels)
+            Rearrange('b i h w (c p1 p2) -> b i c (h p1) (w p2)', p1 = patch_size, p2 = patch_size, c = channels)
         )
         perceptual_loss_weight = model_params.perceptual_loss_weight
         self.has_perceptual_loss = perceptual_loss_weight > 0. and channels == 3
@@ -152,7 +152,7 @@ class LVSM(pl.LightningModule):
         if hasattr(self, '_vgg'):
             return self._vgg[0]
 
-        vgg = torchvision.models.vgg16(pretrained = True)
+        vgg = torchvision.models.vgg16(weights="DEFAULT")
         vgg.classifier = nn.Sequential(*vgg.classifier[:-2])
         vgg.requires_grad_(False)
 
@@ -163,8 +163,8 @@ class LVSM(pl.LightningModule):
         self,
         input_images: Float[Tensor, 'b i {self._c} h w'],
         input_rays: Float[Tensor, 'b i 6 h w'],
-        target_rays: Float[Tensor, 'b 6 h w'],
-        target_images: Float[Tensor, 'b {self._c} h w'] | None = None,
+        target_rays: Float[Tensor, 'b i 6 h w'],
+        target_images: Float[Tensor, 'b i {self._c} h w'] | None = None,
         num_input_images: Int[Tensor, 'b'] | None = None,
         return_loss_breakdown = False
     ):
@@ -182,7 +182,7 @@ class LVSM(pl.LightningModule):
 
         input_tokens = einx.add('b i h w d, h d, w d -> b i h w d', input_tokens, height_embed, width_embed)
 
-        target_tokens = einx.add('b h w d, h d, w d -> b h w d', target_tokens, height_embed, width_embed)
+        target_tokens = einx.add('b i h w d, h d, w d -> b i h w d', target_tokens, height_embed, width_embed)
 
         # add input image embeddings, make it random to prevent overfitting
 
@@ -211,7 +211,7 @@ class LVSM(pl.LightningModule):
         mask = None
 
         if exists(num_input_images):
-            mask = lens_to_mask(num_input_images, num_images + 1) # plus one for target patched rays
+            mask = lens_to_mask(num_input_images, num_images + 1)       # plus one for target patched rays
             mask = repeat(mask, 'b i -> b (i hw)', hw = height * width)
 
         # attention
@@ -235,12 +235,14 @@ class LVSM(pl.LightningModule):
 
         loss =  F.mse_loss(pred_target_images, target_images)
         if self.use_log and self.use_wandb:
-            self.log("train/mes_loss", loss.item())
+            self.log("train/mse_loss", loss.item())
         perceptual_loss = self.zero
 
         if self.has_perceptual_loss:
             self.vgg.eval()
 
+            target_images = rearrange(target_images, "b i c h w -> (b i) c h w")
+            pred_target_images = rearrange(pred_target_images, "b i c h w -> (b i) c h w")
             target_image_vgg_feats = self.vgg(target_images)
             pred_target_image_vgg_feats = self.vgg(pred_target_images)
 
@@ -284,12 +286,13 @@ class LVSM(pl.LightningModule):
             target_rays=target_rays,
         )
         _, _, c, h, w = rgb.shape
-        output_rgb = np.zeros((h, w * 2, c), dtype=np.uint8)
-        target_rgb = (target_rgb.squeeze(0).detach().cpu().permute(1, 2, 0).numpy() * 255.).astype(np.uint8)
-        val_rgb = (val_rgb.squeeze(0).detach().cpu().permute(1, 2, 0).numpy() * 255.).astype(np.uint8)
-        
-        output_rgb[:, :w, :] = target_rgb
-        output_rgb[:, w:, :] = val_rgb
+        target_rgb = (target_rgb.squeeze(0).detach().cpu().permute(0, 2, 3, 1))
+        output_rgb = torch.zeros((target_rgb.shape[0], h, w * 2, c))
+        val_rgb = (val_rgb.squeeze(0).detach().cpu().permute(0, 2, 3, 1))
+        for i in range(target_rgb.shape[0]):
+            output_rgb[i, :, :w, :] = target_rgb[i]
+            output_rgb[i, :, w:, :] = val_rgb[i]
+        output_rgb = (torch.concat(torch.split(output_rgb, 1, 0), dim=1).squeeze(0).numpy() * 255.).astype(np.uint8)
         output_rgb = cv.cvtColor(output_rgb, cv.COLOR_RGB2BGR)
         if self.use_log:
             torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
