@@ -51,27 +51,6 @@ def divisible_by(num, den):
 # class
 
 class LVSM(pl.LightningModule):
-    # def __init__(
-    #     self,
-    #     dim,
-    #     max_image_size_width,
-    #     max_image_size_height,
-    #     patch_size,
-    #     depth = 12,
-    #     heads = 8,
-    #     max_input_images = 32,
-    #     dim_head = 64,
-    #     channels = 3,
-    #     rand_input_image_embed = True,
-    #     decoder_kwargs: dict = dict(
-    #         use_rmsnorm = True,
-    #         add_value_residual = True,
-    #         ff_glu = True,
-    #     ),
-    #     perceptual_loss_weight = 0.5,    # they use 0.5 for scene-level, 1.0 for object-level
-    #     output_dir: str = "./outputs",
-    #     **kwargs
-    # ):
     def __init__(
         self,
         model_params: DictConfig,
@@ -293,11 +272,11 @@ class LVSM(pl.LightningModule):
             output_rgb[i, :, :w, :] = target_rgb[i]
             output_rgb[i, :, w:, :] = val_rgb[i]
         output_rgb = (torch.concat(torch.split(output_rgb, 1, 0), dim=1).squeeze(0).numpy() * 255.).astype(np.uint8)
+
         output_rgb = cv.cvtColor(output_rgb, cv.COLOR_RGB2BGR)
         if self.use_log:
             torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
             cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
-        # self.use_log(f"img/{self.global_step}", output_rgb)
         return val_rgb
 
     @rank_zero_only

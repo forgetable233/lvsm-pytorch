@@ -33,10 +33,10 @@ train:
     max_epochs: 5000
 
 logger:
-  log: False
+  log: True
   output_dir: ./outputs
-  name: ${model.model_params}_${dataset.data_params}_epo_${train.trainer.max_epochs}
-  use_wandb: False
+  name: noise_e_3_small_${model.model_params}_${dataset.data_params}_epo_${train.trainer.max_epochs}
+  use_wandb: True
   wandb:
     project: lvsm
     name: ${logger.name}

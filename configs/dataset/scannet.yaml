@@ -6,4 +6,5 @@ width: 256
 height: 256
 batch_size: 1
 img_num: 4
+test_length: 128
 data_params: "w_${dataset.width}_h_${dataset.height}_bs_${dataset.batch_size}"
