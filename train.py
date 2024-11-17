@@ -42,13 +42,13 @@ def main(cfg: DictConfig):
 
     # prepare dataset
     data_params = cfg.dataset
-    train_scannet = ScanNetDataset(**data_params)
+    train_scannet = Re10kDatasetTest(**data_params)
     val_dataset = ValidationWrapper(train_scannet, 1)
     train_loader = DataLoader(
         dataset=train_scannet,
-        batch_size=16,
+        batch_size=4,
         shuffle=False,
-        num_workers=8
+        num_workers=2
     )
     
     val_loader = DataLoader(

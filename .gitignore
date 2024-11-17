@@ -168,3 +168,4 @@ wandb/
 *.png
 temp/*
 lvsm/
+data/

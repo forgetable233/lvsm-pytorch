@@ -122,46 +122,28 @@ class Re10kDatasetTest(Dataset):
                  root: str = "/run/determined/workdir/data/re10k/train",
                  width: int = 256,
                  height: int = 256,
-                 test_idx: int = -1,
-                 test_chunk: str = "000000.torch",
                  **kwargs):
         super().__init__()
+        assert os.path.exists(root)
         self.root = root
-        chunk_path = os.path.join(root, test_chunk)
-        self.chunk = torch.load(chunk_path, weights_only=True)
-        self.test_idx = test_idx
-        self.example = self.chunk[self.test_idx]
-        
         self.width = width
         self.height = height
         
-        self.K = torch.zeros((3, 3))
-        self.poses = self.example["cameras"]
-        self.len, _ = self.poses.shape
+        self.img_root = os.path.join(root, "imgs")
+        self.pose_root = os.path.join(root, "poses")
+        self.intr_root = os.path.join(root, "intrinsic")
+        assert os.path.exists(self.img_root) and os.path.exists(self.pose_root) and os.path.exists(self.intr_root)
         
-        # load image intr and extr
-        fx, fy, cx, cy = self.poses[0, :4].T
-        self.K[0, 0] = fx
-        self.K[0, 2] = cx
-        self.K[1, 1] = fy
-        self.K[1, 2] = cy
-        self.c2ws = torch.zeros((self.len, 16))
-        self.c2ws[:, -1] = 1
-        self.c2ws[:, :12] = self.poses[:, 6:]
-        self.c2ws = rearrange(self.c2ws, "b (h w) -> b h w", h=4, w=4)
+        self.img_files = sorted(os.listdir(self.img_root))
+        self.pose_files = sorted(os.listdir(self.pose_root))
+        assert len(self.img_files) == len(self.pose_files)
+        self.len = len(self.img_files)
         
-        origin_img = np.array(Image.open(BytesIO(self.example["images"][0].numpy().tobytes())))
-        self.img_w, self.img_h, _ = origin_img.shape
-        # load images
-        self.imgs = []
-        for i in range(self.len):
-            img = np.array(Image.open(BytesIO(self.example["images"][i].numpy().tobytes())))
-            img = cv.resize(img, (self.width, self.height))
-            img = torch.tensor(img)
-            self.imgs.append(img.unsqueeze(0))
-        device = torch.device("cuda")
-        self.imgs = torch.concat(self.imgs, dim=0).to(device)
-        self.imgs = rearrange(self.imgs, "b h w c -> b c h w") / 255.
+        self.img_paths = [os.path.join(self.img_root, img_file) for img_file in self.img_files]
+        self.pose_paths = [os.path.join(self.pose_root, pose_file) for pose_file in self.pose_files]
+        
+        self.img_h, self.img_w, _ = cv.imread(os.path.join(self.img_root, self.img_files[0])).shape
+        self.K = torch.from_numpy(np.loadtxt(os.path.join(self.intr_root, "0000.txt")))
         
         # resize img
         self.resize_K()
@@ -176,7 +158,7 @@ class Re10kDatasetTest(Dataset):
         self.directions: Float[Tensor, "H W 3"] = self.directions_unit_focals.clone()
         self.directions[:, :, :2] = self.directions[:, :, :2] / self.focal_length[:, None, None]
         
-        self.img_num = 4
+        self.img_num = 8
         
     def resize_K(self):
         alpha_y = self.height / self.img_h
@@ -192,8 +174,25 @@ class Re10kDatasetTest(Dataset):
     def __getitem__(self, index):
         if index + self.img_num >= self.len:
             index = self.len - 2 - self.img_num
-        rgb = self.imgs[index:index + self.img_num]
-        pose = self.c2ws[index:index + self.img_num]
+        rgb: Float[Tensor, "i 3 h w"] = torch.from_numpy(
+            np.stack([
+                cv.resize(
+                    cv.cvtColor(
+                        cv.imread(img_file), 
+                        cv.COLOR_BGR2RGB)
+                    , (self.height, self.width))
+                for img_file in self.img_paths[index:index + self.img_num]
+            ])
+        ).permute(0, 3, 1, 2)
+        rgb = rgb / 255.
+        
+        pose: Float[Tensor, "i 4 4"] = torch.from_numpy(
+            np.stack([
+                np.loadtxt(pose_file)
+                for pose_file in self.pose_paths[index:index + self.img_num]
+            ])
+        )
+        
         rays = torch.zeros((self.img_num, self.height, self.width, 6))
         for i in range(self.img_num):
             rays_o, rays_d = get_rays(

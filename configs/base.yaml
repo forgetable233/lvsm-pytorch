@@ -1,5 +1,5 @@
 defaults:
-  - dataset: scannet
+  - dataset: re10k
 
 model:
   patch_size: 16
@@ -35,7 +35,7 @@ train:
 logger:
   log: True
   output_dir: ./outputs
-  name: noise_e_3_small_${model.model_params}_${dataset.data_params}_epo_${train.trainer.max_epochs}
+  name: re10k_small_${model.model_params}_${dataset.data_params}_epo_${train.trainer.max_epochs}
   use_wandb: True
   wandb:
     project: lvsm
