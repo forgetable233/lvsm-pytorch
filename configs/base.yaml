@@ -35,12 +35,11 @@ train:
     precision: 16-mixed
     accelerator: gpu
 
-
 logger:
   log: False
   output_dir: ./outputs
   name: re10k_small_${model.model_params}_${dataset.data_params}_epo_${train.trainer.max_epochs}
-  use_wandb: False
+  use_wandb: True
   wandb:
     project: lvsm
     name: ${logger.name}

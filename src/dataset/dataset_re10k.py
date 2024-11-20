@@ -45,11 +45,12 @@ class Re10kDataset(IterableDataset):
             assert os.path.basename(self.cfg.root) == "train"
         else:
             assert os.path.basename(self.cfg.root) == "test"
-        
-        for chunk in sorted(os.listdir(self.cfg.root)):
+        chunk_files = sorted([file for file in os.listdir(self.cfg.root) if file.endswith(".torch")])
+        # collect chunks
+        for chunk in chunk_files:
             chunk_path = os.path.join(self.cfg.root, chunk)
             self.chunks.append(chunk_path)
-        
+
     
     def convert_poses(
         self,

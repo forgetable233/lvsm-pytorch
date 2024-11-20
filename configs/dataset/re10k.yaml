@@ -1,16 +1,16 @@
 name: re10k
-# root: /run/determined/workdir/data/re10k/train
-# width: 256
-# height: 256
-# batch_size: 1
-# img_num: 4
-# data_params: w_${dataset.width}_h_${dataset.height}_bs_${dataset.batch_size}
-# small_test: True
-
-root: /run/determined/workdir/home/codes/lvsm-pytorch/data/re10k
+root: /run/determined/workdir/data/re10k/train
 width: 256
 height: 256
-test_idx: -1
-test_chunk: 000000.torch
-batch_size: 32
+batch_size: 1
+img_num: 8
 data_params: w_${dataset.width}_h_${dataset.height}_bs_${dataset.batch_size}
+small_test: True
+
+# root: /run/determined/workdir/home/codes/lvsm-pytorch/data/re10k
+# width: 256
+# height: 256
+# test_idx: -1
+# test_chunk: 000000.torch
+# batch_size: 32
+# data_params: w_${dataset.width}_h_${dataset.height}_bs_${dataset.batch_size}

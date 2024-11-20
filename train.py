@@ -16,15 +16,16 @@ import hydra
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
 
-from lvsm_pytorch import LVSM
-from utils.data_utils import ScanNetDataset, ValidationWrapper, Re10kDatasetTest
-from dataset.data_module import DataModule
-from dataset.dataset_re10k import DatasetRe10kCfg, Re10kDataset, Re10kDatasetSmall
-from config import load_typed_root_config, RootCfg
+from src.lvsm_pytorch import LVSM
+from src.dataset.data_test import ScanNetDataset, ValidationWrapper, Re10kDatasetTest
+from src.dataset.data_module import DataModule
+from src.dataset.dataset_re10k import DatasetRe10kCfg, Re10kDataset, Re10kDatasetSmall
+from src.config import load_typed_root_config, RootCfg
 
 DATASET = {
         "scannet": ScanNetDataset,
-        "re10k_small": Re10kDatasetTest
+        "re10k_small": Re10kDatasetTest,
+        "re10k": Re10kDataset
     }
 
 @hydra.main(version_base=None, config_path="./configs", config_name="base")
@@ -46,10 +47,13 @@ def main(cfg: DictConfig):
     )
     with open("model.txt", "a") as f:
         print(model, file=f)
-    exit()
     # prepare dataset
+    OmegaConf.resolve(cfg)
     data_params = cfg.dataset
-    train_scannet = DATASET[data_params.name](**data_params)
+    cfg: RootCfg = load_typed_root_config(cfg)
+    train_scannet = Re10kDataset(cfg.dataset, "train")
+    # train_scannet = DATASET[data_params.name](**data_params)
+    exit()
     val_dataset = ValidationWrapper(train_scannet, 1)
     train_loader = DataLoader(
         dataset=train_scannet,
