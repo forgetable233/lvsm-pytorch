@@ -13,6 +13,7 @@ from einops import rearrange
 
 from lvsm_pytorch.tensor_typing import *
 
+
 class ScanNetDataset(Dataset):
     def __init__(self,
                  root,
@@ -42,7 +43,7 @@ class ScanNetDataset(Dataset):
         
         self.focal_length = torch.tensor([0.5 * self.height / torch.tan(0.5 * self.fovy)])
         self.directions_unit_focals: Float[Tensor, "H W 3"] = get_ray_direction(self.height, self.width, focal=1.0)
-        
+    
         self.directions: Float[Tensor, "H W 3"] = self.directions_unit_focals.clone()
         self.directions[:, :, :2] = self.directions[:, :, :2] / self.focal_length[:, None, None]
         

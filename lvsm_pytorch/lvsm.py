@@ -275,7 +275,7 @@ class LVSM(pl.LightningModule):
 
         output_rgb = cv.cvtColor(output_rgb, cv.COLOR_RGB2BGR)
         if self.use_log:
-            torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
+            # torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
             cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
         return val_rgb
 

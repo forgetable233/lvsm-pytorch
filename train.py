@@ -22,6 +22,11 @@ from dataset.data_module import DataModule
 from dataset.dataset_re10k import DatasetRe10kCfg, Re10kDataset, Re10kDatasetSmall
 from config import load_typed_root_config, RootCfg
 
+DATASET = {
+        "scannet": ScanNetDataset,
+        "re10k_small": Re10kDatasetTest
+    }
+
 @hydra.main(version_base=None, config_path="./configs", config_name="base")
 def main(cfg: DictConfig):
     # prepare log infor
@@ -39,11 +44,9 @@ def main(cfg: DictConfig):
         model_params,
         output_dir=output_dir
     )
-
-    DATASET = {
-        "scannet": ScanNetDataset,
-        "re10k": Re10kDatasetTest
-    }
+    with open("model.txt", "a") as f:
+        print(model, file=f)
+    exit()
     # prepare dataset
     data_params = cfg.dataset
     train_scannet = DATASET[data_params.name](**data_params)
@@ -71,7 +74,7 @@ def main(cfg: DictConfig):
     
     if cfg.logger.log and cfg.logger.use_wandb:
         wandb_logger = WandbLogger(project=cfg.logger.wandb.project, name=cfg.logger.wandb.name)
-        trainer = pl.Trainer(logger=wandb_logger, **train_params.trainer)
+        trainer = pl.Trainer(logger=wandb_logger, default_root_dir=output_dir, **train_params.trainer)
     else:
         trainer = pl.Trainer(**train_params.trainer)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
