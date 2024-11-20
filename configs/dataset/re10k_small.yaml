@@ -7,7 +7,7 @@ name: re10k_small
 # data_params: w_${dataset.width}_h_${dataset.height}_bs_${dataset.batch_size}
 # small_test: True
 
-root: /run/determined/workdir/home/codes/lvsm-pytorch/data/re10k
+root: ./data/re10k
 width: 256
 height: 256
 test_idx: -1
