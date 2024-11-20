@@ -17,7 +17,7 @@ import cv2 as cv
 from omegaconf import DictConfig, OmegaConf
 import wandb
 
-from x_transformers import Encoder
+from x_transformers import Encoder, FeedForward
 
 import einx
 from einops.layers.torch import Rearrange

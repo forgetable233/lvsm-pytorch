@@ -17,6 +17,7 @@ model:
     use_rmsnorm: True
     add_value_residual: True
     ff_glu: True
+    ff_post_act_ln: True
   log: ${logger.log}
   use_wandb: ${logger.use_wandb}
   lr: ${train.lr}
