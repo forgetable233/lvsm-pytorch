@@ -40,15 +40,20 @@ def main(cfg: DictConfig):
         output_dir=output_dir
     )
 
+    DATASET = {
+        "scannet": ScanNetDataset,
+        "re10k": Re10kDatasetTest
+    }
     # prepare dataset
     data_params = cfg.dataset
-    train_scannet = Re10kDatasetTest(**data_params)
+    train_scannet = DATASET[data_params.name](**data_params)
     val_dataset = ValidationWrapper(train_scannet, 1)
     train_loader = DataLoader(
         dataset=train_scannet,
-        batch_size=4,
+        batch_size=2,
         shuffle=False,
-        num_workers=2
+        num_workers=4,
+        persistent_workers=True
     )
     
     val_loader = DataLoader(

@@ -3,16 +3,16 @@ defaults:
 
 model:
   patch_size: 16
-  max_input_images: 4
+  max_input_images: 2
   channels: 3
   width: ${dataset.width}
   height: ${dataset.height}
   rand_input_image_embed: True
   perceptual_loss_weight: 0.5 # they use 0.5 for scene-level, 1.0 for object-level
   decoder_kwargs:
-    dim: 256
+    dim: 768
     depth: 12
-    heads: 8
+    heads: 16
     attn_dim_head: 64
     use_rmsnorm: True
     add_value_residual: True
@@ -33,7 +33,7 @@ train:
     max_epochs: 5000
 
 logger:
-  log: True
+  log: False
   output_dir: ./outputs
   name: re10k_small_${model.model_params}_${dataset.data_params}_epo_${train.trainer.max_epochs}
   use_wandb: True

@@ -98,7 +98,6 @@ class ScanNetDataset(Dataset):
         rays = rays.permute(0, 3, 1, 2)
         
         contex_idx = torch.tensor([0, -1])
-        target_idx = torch.tensor([1, 2])
         # target_rgb = torch.from_numpy(cv.cvtColor(cv.resize(cv.imread(self.rgb_path[index + self.img_num]), (self.width, self.height)), cv.COLOR_BGR2RGB)).permute(2, 0, 1)
         # target_rgb = target_rgb / 255.
         # target_pose = torch.from_numpy(np.loadtxt(self.pose_path[index + self.img_num]))
@@ -113,8 +112,8 @@ class ScanNetDataset(Dataset):
             "pose": pose,
             "K": self.K,
             "rays": rays[contex_idx],               # b c h w
-            "target_rgb": rgb[target_idx],          # b c h w
-            "target_rays": rays[target_idx]         # b c h w
+            "target_rgb": rgb[1:-1],          # b c h w
+            "target_rays": rays[1:-1]         # b c h w
         }
 
 class Re10kDatasetTest(Dataset):
