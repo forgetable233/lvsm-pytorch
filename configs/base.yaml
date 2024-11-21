@@ -18,6 +18,8 @@ model:
     add_value_residual: True
     ff_glu: True
     ff_post_act_ln: True
+    attn_qk_norm: True
+    
   log: ${logger.log}
   use_wandb: ${logger.use_wandb}
   lr: ${train.lr}

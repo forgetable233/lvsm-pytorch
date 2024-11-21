@@ -79,6 +79,7 @@ def plot_cooridinate_c2w(poses: np.ndarray, right_handed=True, plot_kf=False, ti
     x_mod = 1
     y_mod = 1
     z_mod = 1
+    
     # multiply by 10 to visualize orientation more clearly
     pos = pos * [x_mod, y_mod, z_mod]
     dir_vec_x = pos[0] + x_mod * x_ori[0]

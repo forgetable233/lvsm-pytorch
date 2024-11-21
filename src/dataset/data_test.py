@@ -43,7 +43,8 @@ class ScanNetDataset(Dataset):
         
         self.focal_length = torch.tensor([0.5 * self.height / torch.tan(0.5 * self.fovy)])
         self.directions_unit_focals: Float[Tensor, "H W 3"] = get_ray_direction(self.height, self.width, focal=1.0)
-    
+
+        # initial direction under image coordinate
         self.directions: Float[Tensor, "H W 3"] = self.directions_unit_focals.clone()
         self.directions[:, :, :2] = self.directions[:, :, :2] / self.focal_length[:, None, None]
         
@@ -81,18 +82,20 @@ class ScanNetDataset(Dataset):
         if index + self.img_num >= self.len:
             index = self.len - 2 - self.img_num
         
+        # The rgb is from 0 - 1
         rgb: Float[Tensor, "i 3 H W"] = torch.from_numpy(
             np.stack([cv.cvtColor(cv.resize(cv.imread(rgb_img), (self.width, self.height)), cv.COLOR_BGR2RGB) for rgb_img in self.rgb_path[index:index + self.img_num]])).permute(0, 3, 1, 2)
         rgb = rgb / 255.
         pose: Float[Tensor, "i 4 4"] = torch.from_numpy(np.stack([np.loadtxt(pose_file) for pose_file in self.pose_path[index:index + self.img_num]]))
         rays = torch.zeros((self.img_num, self.height, self.width, 6))
         for i in range(pose.shape[0]):
+            # pose is c2w in blender cooridinate
             rays_o, rays_d = get_rays(
                 self.directions, 
                 pose[i], 
                 keepdim=True, 
                 normalize=True,
-                noise_scale=1e-3
+                noise_scale=0
             )
             moment = torch.cross(rays_o, rays_d)
             rays[i, :, :, :3] = moment
@@ -129,7 +132,7 @@ class Re10kDatasetTest(Dataset):
         self.root = root
         self.width = width
         self.height = height
-        
+
         self.img_root = os.path.join(root, "imgs")
         self.pose_root = os.path.join(root, "poses")
         self.intr_root = os.path.join(root, "intrinsic")
@@ -246,7 +249,7 @@ def get_rays(
     noise_scale: float = 0.0
 ) -> Tuple[Float[Tensor, "H W 3"], Float[Tensor, "H W 3"]]:
     assert directions.shape[-1] == 3
-    rays_d = (directions[:, :, None, :]* c2w[None, None, :3, :3]).sum(-1) # (H W 3)
+    rays_d = (directions[:, :, None, :] * c2w[None, None, :3, :3]).sum(-1) # (H W 3)
     rays_o = c2w[None, None, :3, 3].expand(rays_d.shape)
     
     # add camera noise to avoid grid-like artifect
