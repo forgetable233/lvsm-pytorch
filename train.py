@@ -50,10 +50,9 @@ def main(cfg: DictConfig):
     # prepare dataset
     OmegaConf.resolve(cfg)
     data_params = cfg.dataset
-    cfg: RootCfg = load_typed_root_config(cfg)
-    train_scannet = Re10kDataset(cfg.dataset, "train")
-    # train_scannet = DATASET[data_params.name](**data_params)
-    exit()
+    # cfg: RootCfg = load_typed_root_config(cfg)
+    # train_scannet = Re10kDataset(cfg.dataset, "train")
+    train_scannet = DATASET[data_params.name](**data_params)
     val_dataset = ValidationWrapper(train_scannet, 1)
     train_loader = DataLoader(
         dataset=train_scannet,

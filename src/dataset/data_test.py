@@ -12,7 +12,7 @@ import numpy as np
 from einops import rearrange
 
 from lvsm_pytorch.tensor_typing import *
-
+from utils.geometry_utils import plot_cooridinate_c2w
 
 class ScanNetDataset(Dataset):
     def __init__(self,
@@ -94,7 +94,8 @@ class ScanNetDataset(Dataset):
                 normalize=True,
                 noise_scale=1e-3
             )
-            rays[i, :, :, :3] = rays_o
+            moment = torch.cross(rays_o, rays_d)
+            rays[i, :, :, :3] = moment
             rays[i, :, :, 3:] = rays_d
         rays = rays.permute(0, 3, 1, 2)
         
@@ -148,13 +149,15 @@ class Re10kDatasetTest(Dataset):
         # resize img
         self.resize_K()
         
-        # get coor
+        # get fovx and fovy
         self.fovy = 2 * torch.atan(self.height / (2 * self.K[1, 1]))
         self.fovx = 2 * torch.atan(self.width / (2 * self.K[0, 0]))
         
+        # focal length under pixel cooridinate
         self.focal_length = torch.tensor([0.5 * self.height / torch.tan(0.5 * self.fovy)])
         self.directions_unit_focals: Float[Tensor, "H W 3"] = get_ray_direction(self.height, self.width, focal=1.0)
         
+        # ray direction under blender coordinate
         self.directions: Float[Tensor, "H W 3"] = self.directions_unit_focals.clone()
         self.directions[:, :, :2] = self.directions[:, :, :2] / self.focal_length[:, None, None]
         
@@ -229,7 +232,7 @@ def get_ray_direction(H: int, W: int, focal: float, use_pixel_centers: bool = Tr
         torch.arange(H, dtype=torch.float32) + pixel_center,
         indexing="xy"
     )
-    # opencv coordinate
+    # blender coordinate
     directions: Float[Tensor, "H W 3"] = torch.stack(
         [(i - cx) / fx, -(j - cy) / fy, -torch.ones_like(i)], -1
     )
@@ -267,7 +270,7 @@ class ValidationWrapper(Dataset):
         self.dataset = dataset
         self.length = length
         self.dataset_iterator = None
-    
+
     def __len__(self):
         return self.length
 

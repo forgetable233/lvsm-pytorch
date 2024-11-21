@@ -1,5 +1,5 @@
 defaults:
-  - dataset: re10k
+  - dataset: re10k_small
 
 model:
   patch_size: 16
