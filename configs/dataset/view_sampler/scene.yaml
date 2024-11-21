@@ -1,2 +1,16 @@
+name: scene
+
 num_target_views: 6
 num_context_views: 2
+
+min_distance_between_context_views: 8
+max_distance_between_context_views: 12
+min_distance_to_context_views: 0
+
+warm_up_steps: 0
+initial_min_distance_between_context_views: 2
+initial_max_distance_between_context_views: 6
+
+is_overfitting: False
+cameras_are_circular: False
+step_tracker: False

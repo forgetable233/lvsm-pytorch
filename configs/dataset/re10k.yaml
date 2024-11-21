@@ -1,3 +1,6 @@
+defaults:
+  - view_sampler: scene
+
 name: re10k
 root: /run/determined/workdir/data/re10k/train
 width: 256
@@ -6,6 +9,9 @@ batch_size: 1
 img_num: 8
 data_params: w_${dataset.width}_h_${dataset.height}_bs_${dataset.batch_size}
 small_test: True
+
+max_fov: 90
+make_baseline_1: True
 
 # root: /run/determined/workdir/home/codes/lvsm-pytorch/data/re10k
 # width: 256
