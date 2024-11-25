@@ -7,6 +7,7 @@ from lvsm_pytorch.tensor_typing import *
 
 import os
 from functools import wraps
+from dataclasses import dataclass
 
 import torchvision
 
@@ -26,6 +27,9 @@ from x_transformers import Encoder, FeedForward
 import einx
 from einops.layers.torch import Rearrange
 from einops import rearrange, repeat, pack, unpack
+
+from config import ModelCfg
+from utils.geometry_utils import evalute_img
 
 """d
 ein notation:
@@ -52,12 +56,13 @@ def lens_to_mask(lens: Int[Tensor, 'b'], max_length: int):
 def divisible_by(num, den):
     return (num % den) == 0
 
+
 # class
 
 class LVSM(pl.LightningModule):
     def __init__(
         self,
-        model_params: DictConfig,
+        model_params: ModelCfg,
         output_dir: str = "./outputs",
     ):
         super().__init__()
@@ -102,8 +107,9 @@ class LVSM(pl.LightningModule):
             nn.Linear(6 * patch_size_sq, dim)
         )
         # depth, heads, dim_head = model_params.depth, model_params.heads, model_params.dim_head
+        deccoder_kwargs = model_params.decoder_kwargs
         self.decoder = Encoder(
-            **model_params.decoder_kwargs
+            **vars(model_params.decoder_kwargs)
         )
         
         self.target_unpatchify_to_image = nn.Sequential(
@@ -244,13 +250,17 @@ class LVSM(pl.LightningModule):
         return total_loss, (loss, perceptual_loss)
     
     def training_step(self, batch, batch_idx):
-        rgb = batch["rgb"]
-        rays = batch["rays"]
-        target_rgb = batch["target_rgb"]
-        target_rays = batch["target_rays"]
+        context = batch["context"]
+        target = batch["target"]
+        
+        input_rgb = context["images"]   # b i 3 h w
+        input_rays = context["rays"]    # b i 3 h w
+        target_rgb = target["images"]   # b i 3 h w
+        target_rays = target["rays"]    # b i 3 h w
+        
         loss = self.forward(
-            input_images=rgb,
-            input_rays=rays,
+            input_images=input_rgb,
+            input_rays=input_rays,
             target_rays=target_rays,
             target_images=target_rgb
         )
@@ -259,42 +269,56 @@ class LVSM(pl.LightningModule):
         return loss
     
     def validation_step(self, batch, batch_idx):
-        rgb = batch["rgb"][0].unsqueeze(0)
-        rays = batch["rays"][0].unsqueeze(0)
-        target_rgb = batch["target_rgb"][0].unsqueeze(0)
-        target_rays = batch["target_rays"][0].unsqueeze(0)
-        val_rgb = self.forward(
-            input_images=rgb,
-            input_rays=rays,
-            target_rays=target_rays,
+        context = batch["context"]
+        target = batch["target"]
+        
+        input_rgb = context["images"]       # b i 3 h w
+        input_rays = context["rays"]        # b i 3 h w
+        target_rgb = target["images"]       # b i 3 h w
+        target_rays = target["rays"]        # b i 3 h w
+        
+        pred_rgb = self.forward(
+            input_images=input_rgb,
+            input_rays=input_rays,
+            target_rays=target_rays
         )
-        _, _, c, h, w = rgb.shape
-        target_rgb = (target_rgb.squeeze(0).detach().cpu().permute(0, 2, 3, 1))
-        output_rgb = torch.zeros((target_rgb.shape[0], h, w * 2, c))
-        val_rgb = (val_rgb.squeeze(0).detach().cpu().permute(0, 2, 3, 1))
-        for i in range(target_rgb.shape[0]):
-            output_rgb[i, :, :w, :] = target_rgb[i]
-            output_rgb[i, :, w:, :] = val_rgb[i]
-        output_rgb = (torch.concat(torch.split(output_rgb, 1, 0), dim=1).squeeze(0).numpy() * 255.).astype(np.uint8)
-
+        psnr, ssim, lpips_ = evalute_img(pred_rgb, target_rgb)
+        
+        output_rgb = torch.concat([target_rgb, pred_rgb], dim=-1).squeeze(0)
+        output_rgb = (torch.concat(torch.split(output_rgb, 1, 0), dim=0).squeeze(0).detach().cpu().numpy() * 255.).astype(np.uint8)
         output_rgb = cv.cvtColor(output_rgb, cv.COLOR_RGB2BGR)
         if self.use_log:
-            # torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
             cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
-        return val_rgb
+            if self.use_wandb:
+                img = wandb.Image(output_rgb)
+                self.log("val/psnr", psnr.item())
+                self.log("val/ssim", ssim.item())
+                self.log("val/lpips", lpips_.item())
+                self.log("val/img", img)
+    
+        # rgb = batch["rgb"][0].unsqueeze(0)
+        # rays = batch["rays"][0].unsqueeze(0)
+        # target_rgb = batch["target_rgb"][0].unsqueeze(0)
+        # target_rays = batch["target_rays"][0].unsqueeze(0)
+        # val_rgb = self.forward(
+        #     input_images=rgb,
+        #     input_rays=rays,
+        #     target_rays=target_rays,
+        # )
+        # _, _, c, h, w = rgb.shape
+        # target_rgb = (target_rgb.squeeze(0).detach().cpu().permute(0, 2, 3, 1))
+        # output_rgb = torch.zeros((target_rgb.shape[0], h, w * 2, c))
+        # val_rgb = (val_rgb.squeeze(0).detach().cpu().permute(0, 2, 3, 1))
+        # for i in range(target_rgb.shape[0]):
+        #     output_rgb[i, :, :w, :] = target_rgb[i]
+        #     output_rgb[i, :, w:, :] = val_rgb[i]
+        # output_rgb = (torch.concat(torch.split(output_rgb, 1, 0), dim=1).squeeze(0).numpy() * 255.).astype(np.uint8)
 
-    def train_dataloader(self) -> sys.Any:
-        return super().train_dataloader()
-    
-    def val_dataloader(self) -> TRAIN_DATALOADERS:
-        return super().val_dataloader()
-    
-    def test_dataloader(self) -> TRAIN_DATALOADERS:
-        return super().test_dataloader()
-    
-    @rank_zero_only
-    def wandb_log(self, name, item):
-        wandb.log({name: item})
+        # output_rgb = cv.cvtColor(output_rgb, cv.COLOR_RGB2BGR)
+        # if self.use_log:
+        #     # torch.save(self.state_dict(), os.path.join(self.ckpt_path, f"{self.global_step}.pt"))
+        #     cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
+        # return val_rgb
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)

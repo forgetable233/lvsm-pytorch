@@ -1,10 +1,14 @@
 import os
+from typing import Tuple
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 
 from jaxtyping import Bool, Float, Int64
 from einops import einsum, rearrange, reduce, repeat
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
+import lpips
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
@@ -152,3 +156,87 @@ def plot_cooridinate_c2w(poses: np.ndarray, right_handed=True, plot_kf=False, ti
     else:
         plt.legend()
     return ax     
+
+
+
+def get_ray_direction(H: int, W: int, focal: float, use_pixel_centers: bool = True) -> Float[Tensor, "H W 3"]:
+    """
+    Get ray direction for all pixel in camera coordinate
+    """
+    pixel_center = 0.5 if use_pixel_centers else 0
+    fx, fy = focal, focal
+    cx, cy = W / 2, H / 2
+    i, j = torch.meshgrid(
+        torch.arange(W, dtype=torch.float32) + pixel_center,
+        torch.arange(H, dtype=torch.float32) + pixel_center,
+        indexing="xy"
+    )
+    # blender coordinate
+    directions: Float[Tensor, "H W 3"] = torch.stack(
+        [(i - cx) / fx, -(j - cy) / fy, -torch.ones_like(i)], -1
+    )
+    return directions
+
+def get_rays(
+    directions: Float[Tensor, "B H W 3"],
+    c2w: Float[Tensor, "B 4 4"],
+    keepdim: bool = False,
+    normalize: bool = True,
+    noise_scale: float = 0.0
+) -> Tuple[Float[Tensor, "B H W 3"], Float[Tensor, "B H W 3"]]:
+    assert directions.shape[-1] == 3
+    if directions.ndim == 3:
+        directions = directions.unsqueeze(0)
+        c2w = c2w.unsqueeze(0)
+    rays_d = (directions[:, :, :, None, :] * c2w[:, None, None, :3, :3]).sum(-1) # (B H W 3)
+    rays_o = c2w[:, None, None, :3, 3].expand(rays_d.shape)
+    
+    # add camera noise to avoid grid-like artifect
+    # https://github.com/ashawkey/stable-dreamfusion/blob/49c3d4fa01d68a4f027755acf94e1ff6020458cc/nerf/utils.py#L373
+    if noise_scale > 0:
+        rays_o = rays_o + torch.randn(3, device=rays_o.device) * noise_scale
+        rays_d = rays_d + torch.randn(3, device=rays_d.device) * noise_scale
+    if normalize:
+        rays_d = F.normalize(rays_d, dim=-1)
+    if not keepdim:
+        rays_o, rays_d = rays_o.reshape(-1, 3), rays_d.reshape(-1, 3)
+    return rays_o, rays_d
+
+def evalute_img(
+    pred_imgs: Float[Tensor, "b i c h w"],
+    gt_imgs: Float[Tensor, "b i c h w"]
+):
+    assert pred_imgs.shape == gt_imgs.shape
+    _, b, c, h, w = pred_imgs.shape
+    pred_imgs = pred_imgs.squeeze(0)
+    gt_imgs = gt_imgs.squeeze(0)
+    lpips_model = lpips.LPIPS(net="vgg").to(pred_imgs.device)
+    psnr_data = torch.zeros(b)
+    ssim_data = torch.zeros(b)
+    lpips_data = torch.zeros(b)
+    
+    # lpips_data = lpips_model(gt_imgs, pred_imgs).item()
+    
+    # pred_imgs = (pred_imgs.permute(0, 2, 3, 1).detach().cpu().numpy() * 255.).astype(np.uint8)
+    # pred_imgs = cv.cvtColor(pred_imgs, cv.COLOR_RGB2BGR)
+    # gt_imgs = (gt_imgs.permute(0, 2, 3, 1).detach().cpu().numpy() * 255.).astype(np.uint8)
+    # gt_imgs = cv.cvtColor(gt_imgs, cv.COLOR_RGB2BGR)
+    for i in range(b):
+        pred_img = pred_imgs[i]
+        gt_img = gt_imgs[i]
+        lpips_data[i] = lpips_model(pred_img, gt_img)
+        
+        # convert tensor to numpy 0 - 1 to 0 - 255
+        pred_img = cv.cvtColor(
+            (pred_img.permute(1, 2, 0).detach().cpu().numpy() * 255.).astype(np.uint8),
+            cv.COLOR_RGB2BGR)
+        gt_img = cv.cvtColor(
+            (gt_img.permute(1, 2, 0).detach().cpu().numpy() * 255.).astype(np.uint8),
+            cv.COLOR_RGB2BGR
+        )
+        psnr = peak_signal_noise_ratio(gt_img, pred_img)
+        ssim = structural_similarity(gt_img, pred_img, multichannel=True, channel_axis=-1)
+        psnr_data[i] = psnr
+        ssim_data[i] = ssim
+    
+    return psnr_data.mean(), ssim_data.mean(), lpips_data.mean()

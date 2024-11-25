@@ -47,6 +47,6 @@ def apply_crop_shim_to_vies(views, shape: list[int, int]) :
 def apply_crop_shim(example, shape: list[int, int]):
     return {
         **example,
-        "context": apply_crop_shim(example["context"], shape),
-        "target": apply_crop_shim(example["target", shape])
+        "context": apply_crop_shim_to_vies(example["context"], shape),
+        "target": apply_crop_shim_to_vies(example["target"], shape)
     }

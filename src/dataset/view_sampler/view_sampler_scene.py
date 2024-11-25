@@ -36,8 +36,9 @@ class ViewSamplerScene:
         fraction = self.global_step / self.cfg.warm_up_steps
         return min(initial + int((final - initial) * fraction), final)
     
-    def sampler(
+    def sample(
         self,
+        scene: str,
         extrinsics: Float[Tensor, "view 4 4"],
         intrinsic: Float[Tensor, "view 3 3"],
         device: torch.device = torch.device("cpu")

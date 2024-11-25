@@ -17,8 +17,8 @@ from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
 
 from src.lvsm_pytorch import LVSM
-from src.dataset.data_test import ScanNetDataset, ValidationWrapper, Re10kDatasetTest
-from src.dataset.data_module import DataModule
+from src.dataset.data_test import ScanNetDataset, Re10kDatasetTest
+from src.dataset.data_module import DataModule, ValidationWrapper
 from src.dataset.dataset_re10k import DatasetRe10kCfg, Re10kDataset, Re10kDatasetSmall
 from src.config import load_typed_root_config, RootCfg
 
@@ -39,26 +39,41 @@ def main(cfg: DictConfig):
     OmegaConf.update(cfg, "logger.output_dir", output_dir)
     if cfg.logger.log:
         os.makedirs(output_dir, exist_ok=True)
+
+    # unpack configs
+    OmegaConf.resolve(cfg)
+    cfg: RootCfg = load_typed_root_config(cfg)
+    
+    # prepare trainer
+    train_params = cfg.train
+    if cfg.logger.log and cfg.logger.use_wandb:
+        wandb_logger = WandbLogger(project=cfg.logger.wandb.project, name=cfg.logger.wandb.name)
+        trainer = pl.Trainer(logger=wandb_logger, 
+                             default_root_dir=output_dir, 
+                             **vars(train_params.trainer))
+    else:
+        trainer = pl.Trainer(**vars(train_params.trainer))
+    
+    # load dataset
+    data_module = DataModule(cfg, trainer.global_rank)
+    
     # prepare model     
     model_params = cfg.model
     model = LVSM(
         model_params,
         output_dir=output_dir
     )
-    # with open("model.txt", "a") as f:
-    #     print(model, file=f)
-    # prepare dataset
-    OmegaConf.resolve(cfg)
-    data_params = cfg.dataset
-    dataset_cfg: RootCfg = load_typed_root_config(cfg)
-    train_scannet = Re10kDataset(dataset_cfg.dataset, "train")
-    print("dataset done")
-    
-    train_scannet_iter = iter(train_scannet)
-    print("iter done")
-    print(next(train_scannet_iter))
+        
+    # start to train the model
+    if train_params.resume:
+        assert os.path.exists(train_params.ckpt)
+        trainer.fit(model, datamodule=data_module, ckpt_path=train_params.ckpt)
+    else:
+        trainer.fit(model, datamodule=data_module)
+        
     exit()
-    print(len(train_scannet))
+    # train_scannet = Re10kDataset(cfg.dataset, "train")
+    # print(len(train_scannet))
     # train_scannet = DATASET[data_params.name](**data_params)
     val_dataset = ValidationWrapper(train_scannet, 1)
     train_loader = DataLoader(

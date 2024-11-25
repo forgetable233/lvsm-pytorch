@@ -2,17 +2,23 @@ defaults:
   - view_sampler: scene
 
 name: re10k
-root: /run/determined/workdir/data/re10k/train
+root: /run/determined/workdir/data/re10k
 shape: [256, 256]
 batch_size: 1
 img_num: 8
 data_params: w_${dataset.shape[1]}_h_${dataset.shape[0]}_bs_${dataset.batch_size}
 small_test: True
-augment: True
+augment: False
 
 max_fov: 90
 make_baseline_1: True
 baseline_epsilon: 1e-3
+
+normalize: True
+keepdim: True
+noise_scale: 0
+
+bf16: True
 
 # root: /run/determined/workdir/home/codes/lvsm-pytorch/data/re10k
 # width: 256

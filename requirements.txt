@@ -10,3 +10,4 @@ jaxtyping
 dacite
 scikit-image
 matplotlib
+lpips

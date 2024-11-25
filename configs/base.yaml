@@ -11,7 +11,7 @@ model:
   perceptual_loss_weight: 0.5 # they use 0.5 for scene-level, 1.0 for object-level
   decoder_kwargs:
     dim: 768
-    depth: 12
+    depth: 1  # 12 | 6
     heads: 16
     attn_dim_head: 64
     use_rmsnorm: True
@@ -46,3 +46,20 @@ logger:
   wandb:
     project: lvsm
     name: ${logger.name}
+
+data_loader:
+  train:
+    num_workers: 1
+    persistent_workers: True
+    batch_size: 1
+    seed: 42
+  val:
+    num_workers: 1
+    persistent_workers: False
+    batch_size: 1
+    seed: 114514
+  test:
+    num_workers: 1
+    persistent_workers: True
+    batch_size: 1
+    seed: 1234

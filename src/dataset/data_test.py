@@ -12,7 +12,7 @@ import numpy as np
 from einops import rearrange
 
 from lvsm_pytorch.tensor_typing import *
-from utils.geometry_utils import plot_cooridinate_c2w
+from utils.geometry_utils import plot_cooridinate_c2w, get_ray_direction, get_rays
 
 class ScanNetDataset(Dataset):
     def __init__(self,
@@ -113,10 +113,10 @@ class ScanNetDataset(Dataset):
         # tar_rays = tar_rays.permute(2, 0, 1)
         # target_rgb: Float[Tensor, "3 H W"] = torch.from_numpy()
         return {
-            "rgb": rgb[contex_idx],                 # b c h w
+            "rgb": rgb[contex_idx],                 # i c h w
             "pose": pose,
             "K": self.K,
-            "rays": rays[contex_idx],               # b c h w
+            "rays": rays[contex_idx],               # i c h w
             "target_rgb": rgb[1:-1],          # b c h w
             "target_rays": rays[1:-1]         # b c h w
         }
@@ -222,69 +222,28 @@ class Re10kDatasetTest(Dataset):
         }
 
 
+# def get_rays(
+#     directions: Float[Tensor, "H W 3"],
+#     c2w: Float[Tensor, "4 4"],
+#     keepdim: bool = False,
+#     normalize: bool = True,
+#     noise_scale: float = 0.0
+# ) -> Tuple[Float[Tensor, "H W 3"], Float[Tensor, "H W 3"]]:
+#     assert directions.shape[-1] == 3
     
-def get_ray_direction(H: int, W: int, focal: float, use_pixel_centers: bool = True) -> Float[Tensor, "H W 3"]:
-    """
-    Get ray direction for all pixel in camera coordinate
-    """
-    pixel_center = 0.5 if use_pixel_centers else 0
-    fx, fy = focal, focal
-    cx, cy = W / 2, H / 2
-    i, j = torch.meshgrid(
-        torch.arange(W, dtype=torch.float32) + pixel_center,
-        torch.arange(H, dtype=torch.float32) + pixel_center,
-        indexing="xy"
-    )
-    # blender coordinate
-    directions: Float[Tensor, "H W 3"] = torch.stack(
-        [(i - cx) / fx, -(j - cy) / fy, -torch.ones_like(i)], -1
-    )
-    return directions
-
-def get_rays(
-    directions: Float[Tensor, "H W 3"],
-    c2w: Float[Tensor, "4 4"],
-    keepdim: bool = False,
-    normalize: bool = True,
-    noise_scale: float = 0.0
-) -> Tuple[Float[Tensor, "H W 3"], Float[Tensor, "H W 3"]]:
-    assert directions.shape[-1] == 3
-    rays_d = (directions[:, :, None, :] * c2w[None, None, :3, :3]).sum(-1) # (H W 3)
-    rays_o = c2w[None, None, :3, 3].expand(rays_d.shape)
+#     rays_d = (directions[:, :, None, :] * c2w[None, None, :3, :3]).sum(-1) # (H W 3)
+#     rays_o = c2w[None, None, :3, 3].expand(rays_d.shape)
     
-    # add camera noise to avoid grid-like artifect
-    # https://github.com/ashawkey/stable-dreamfusion/blob/49c3d4fa01d68a4f027755acf94e1ff6020458cc/nerf/utils.py#L373
-    if noise_scale > 0:
-        rays_o = rays_o + torch.randn(3, device=rays_o.device) * noise_scale
-        rays_d = rays_d + torch.randn(3, device=rays_d.device) * noise_scale
-    if normalize:
-        rays_d = F.normalize(rays_d, dim=-1)
-    if not keepdim:
-        rays_o, rays_d = rays_o.reshape(-1, 3), rays_d.reshape(-1, 3)
-    return rays_o, rays_d
-
-class ValidationWrapper(Dataset):
-    dataset: Dataset
-    dataset_iterator: Optional[Iterator]
-    length: int
-
-    def __init__(self, dataset: Dataset, length: int) -> None:
-        super().__init__()
-        self.dataset = dataset
-        self.length = length
-        self.dataset_iterator = None
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, index: int):
-        if isinstance(self.dataset, IterableDataset):
-            if self.dataset_iterator is None:
-                self.dataset_iterator = iter(self.dataset)
-            return next(self.dataset_iterator)
-        
-        random_index = torch.randint(0, len(self.dataset), tuple())
-        return self.dataset[random_index.item()]
+#     # add camera noise to avoid grid-like artifect
+#     # https://github.com/ashawkey/stable-dreamfusion/blob/49c3d4fa01d68a4f027755acf94e1ff6020458cc/nerf/utils.py#L373
+#     if noise_scale > 0:
+#         rays_o = rays_o + torch.randn(3, device=rays_o.device) * noise_scale
+#         rays_d = rays_d + torch.randn(3, device=rays_d.device) * noise_scale
+#     if normalize:
+#         rays_d = F.normalize(rays_d, dim=-1)
+#     if not keepdim:
+#         rays_o, rays_d = rays_o.reshape(-1, 3), rays_d.reshape(-1, 3)
+#     return rays_o, rays_d
 
 
 
