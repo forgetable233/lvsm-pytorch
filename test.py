@@ -1,19 +1,27 @@
 import os
 
+import torch
+from torch.utils.data import IterableDataset
+
+
 import numpy as np
 import cv2 as cv
 import matplotlib.pyplot as plt
 
 from src.utils.geometry_utils import plot_cooridinate_c2w
 
-root = "./data/re10k/poses"
+class testIterableDataset(IterableDataset):
+    def __init__(self, length) -> None:
+        super().__init__()
+        self.length = length
+        
+    def __len__(self):
+        return self.length
+    
+    def __iter__(self):
+        for i in range(self.length):
+            yield i
 
-pose_files = sorted(os.listdir(root))
-poses = np.zeros((len(pose_files), 4, 4))
-
-for i, file in enumerate(pose_files):
-    poses[i] = np.loadtxt(os.path.join(root, file))
-
-img = plot_cooridinate_c2w(poses[:, :3, :])
-
-plt.savefig("./temp/c2w.png")
+a = testIterableDataset(10)
+a_iter = iter(a)
+print(next(a_iter))

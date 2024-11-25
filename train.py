@@ -45,21 +45,28 @@ def main(cfg: DictConfig):
         model_params,
         output_dir=output_dir
     )
-    with open("model.txt", "a") as f:
-        print(model, file=f)
+    # with open("model.txt", "a") as f:
+    #     print(model, file=f)
     # prepare dataset
     OmegaConf.resolve(cfg)
     data_params = cfg.dataset
-    # cfg: RootCfg = load_typed_root_config(cfg)
-    # train_scannet = Re10kDataset(cfg.dataset, "train")
-    train_scannet = DATASET[data_params.name](**data_params)
+    dataset_cfg: RootCfg = load_typed_root_config(cfg)
+    train_scannet = Re10kDataset(dataset_cfg.dataset, "train")
+    print("dataset done")
+    
+    train_scannet_iter = iter(train_scannet)
+    print("iter done")
+    print(next(train_scannet_iter))
+    exit()
+    print(len(train_scannet))
+    # train_scannet = DATASET[data_params.name](**data_params)
     val_dataset = ValidationWrapper(train_scannet, 1)
     train_loader = DataLoader(
         dataset=train_scannet,
-        batch_size=2,
+        batch_size=16,
         shuffle=False,
-        num_workers=4,
-        persistent_workers=True
+        num_workers=0,
+        persistent_workers=False
     )
     
     val_loader = DataLoader(
@@ -68,7 +75,6 @@ def main(cfg: DictConfig):
         shuffle=False,
         num_workers=0
     )
-    
     # prepare train params
     train_params = cfg.train
     if train_params.resume:

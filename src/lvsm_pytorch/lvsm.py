@@ -1,5 +1,7 @@
 from __future__ import annotations
 import sys
+
+from pytorch_lightning.utilities.types import TRAIN_DATALOADERS
 sys.path.append("src")
 from lvsm_pytorch.tensor_typing import *
 
@@ -281,6 +283,15 @@ class LVSM(pl.LightningModule):
             cv.imwrite(os.path.join(self.img_path, f"{self.global_step}.jpg"), output_rgb)
         return val_rgb
 
+    def train_dataloader(self) -> sys.Any:
+        return super().train_dataloader()
+    
+    def val_dataloader(self) -> TRAIN_DATALOADERS:
+        return super().val_dataloader()
+    
+    def test_dataloader(self) -> TRAIN_DATALOADERS:
+        return super().test_dataloader()
+    
     @rank_zero_only
     def wandb_log(self, name, item):
         wandb.log({name: item})

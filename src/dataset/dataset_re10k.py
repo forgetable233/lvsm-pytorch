@@ -1,8 +1,10 @@
 import os
 from dataclasses import dataclass
+from functools import cached_property
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
+from typing import Literal, List
+import json
 
 import torch
 from torch import Tensor
@@ -14,12 +16,13 @@ from PIL import Image
 from .dataset import DatasetCfgCommon
 from .view_sampler.view_sampler_scene import ViewSamplerSceneCfg
 from utils.geometry_utils import get_fov
+from shims.argument_shim import apply_augmentation_shim
+from shims.crop_shims import apply_crop_shim
 
 @dataclass
 class DatasetRe10kCfg:
     name: Literal["re10k"]
-    width: int
-    height: int
+    shape: list[int, int]
     batch_size: int
     img_num: int
     data_params: str
@@ -27,6 +30,11 @@ class DatasetRe10kCfg:
     small_test: bool
     max_fov: float
     make_baseline_1: bool
+    
+    baseline_epsilon: float
+    augment: bool
+    
+    
     
     view_sampler: ViewSamplerSceneCfg
 
@@ -132,7 +140,7 @@ class Re10kDataset(IterableDataset):
                     "context": {
                         "extrinsics": extrinsics[context_indices],
                         "intrinsics": intrinsics[context_indices],
-                        "image": context_images,
+                        "images": context_images,
                         "near": self.get_bound("near", len(context_indices)) / scale,
                         "far": self.get_bound("far", len(context_indices)) / scale,
                         "index": context_indices,
@@ -140,14 +148,17 @@ class Re10kDataset(IterableDataset):
                     "target": {
                         "extrinsics": extrinsics[target_indices],
                         "intrinsics": intrinsics[target_indices],
-                        "image": target_images,
+                        "images": target_images,
                         "near": self.get_bound("near", len(target_indices)) / scale,
                         "far": self.get_bound("far", len(target_indices)) / scale,
                         "index": target_indices,
                     },
                     "scene": scene,
                 }
-            pass
+                if self.stage == "train" and self.argument:
+                    example = apply_augmentation_shim(example)
+                resized_exampe = apply_crop_shim(example, self.cfg.shape)
+                yield resized_exampe
     
     def __len__(self):
         return len(self.chunks)
@@ -185,15 +196,35 @@ class Re10kDataset(IterableDataset):
             torch_images.append(self.to_tensor(image))
         return torch.stack(torch_images)
     
-    def __iter__(self):
+    # def __iter__(self):
         
-        for chunk_path in self.chunks:
-                chunk = torch.load(chunk_path)
-                ## TODO add shuffle for train and val current only use one scene for test
-                for example in chunk:
-                    extrinsics, intrinsics = self.convert_poses(example["cameras"])
-        pass
-        return super().__iter__()
+    #     for chunk_path in self.chunks:
+    #             chunk = torch.load(chunk_path, weights_only=True)
+    #             ## TODO add shuffle for train and val current only use one scene for test
+    #             for example in chunk:
+    #                 extrinsics, intrinsics = self.convert_poses(example["cameras"])
+    #     pass
+    #     return super().__iter__()
+    
+    @cached_property
+    def index(self) -> dict[str, Path]:
+        merged_index = {}
+        data_stages = [self.data_stage]
+        if self.cfg.overfit_to_scene is not None:
+            data_stages = ("test", "train")
+        for data_stage in data_stages:
+            for root in self.cfg.roots:
+                # Load the root's index.
+                with (os.path.join(root / data_stage / "index.json")).open("r") as f:
+                    index = json.load(f)
+                index = {k: Path(root / data_stage / v) for k, v in index.items()}
+
+                # The constituent datasets should have unique keys.
+                assert not (set(merged_index.keys()) & set(index.keys()))
+
+                # Merge the root's index into the main index.
+                merged_index = {**merged_index, **index}
+        return merged_index
     
     def __len__(self):
         return len(self.chunks)
@@ -222,6 +253,6 @@ class Re10kDatasetSmall(Re10kDataset):
         
         return super().__iter__()
     
-    def __len__(self):
-        return len(self.chunks)
+    def __len__(self) -> int:
+        return len(self.chunks())
         

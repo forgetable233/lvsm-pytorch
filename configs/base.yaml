@@ -1,12 +1,12 @@
 defaults:
-  - dataset: re10k_small
+  - dataset: re10k
 
 model:
   patch_size: 16
   max_input_images: 2
   channels: 3
-  width: ${dataset.width}
-  height: ${dataset.height}
+  width: ${dataset.shape[0]}
+  height: ${dataset.shape[1]}
   rand_input_image_embed: True
   perceptual_loss_weight: 0.5 # they use 0.5 for scene-level, 1.0 for object-level
   decoder_kwargs:
@@ -19,7 +19,7 @@ model:
     ff_glu: True
     ff_post_act_ln: True
     attn_qk_norm: True
-    
+
   log: ${logger.log}
   use_wandb: ${logger.use_wandb}
   lr: ${train.lr}
@@ -36,6 +36,7 @@ train:
     max_epochs: 5000
     precision: 16-mixed
     accelerator: gpu
+    gradient_clip_val: 1.0
 
 logger:
   log: False
